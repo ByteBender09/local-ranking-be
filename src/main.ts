@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import compression from 'compression';
+import cookieParser from 'cookie-parser';
 import { json, urlencoded } from 'express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
@@ -29,6 +30,7 @@ async function bootstrap(): Promise<void> {
     }),
   );
   app.use(compression());
+  app.use(cookieParser());
 
   // Hard cap request payloads. Anything bigger gets rejected before parsing
   // so a flood of giant bodies can't exhaust memory.

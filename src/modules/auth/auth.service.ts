@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { AuthConfig } from '../../config/configuration';
 import { User, UserRole } from '../../database/entities';
 import {
   AuthSession,
@@ -24,9 +26,16 @@ export class AuthService {
   constructor(
     @InjectRepository(User) private readonly users: Repository<User>,
     private readonly jwt: JwtService,
+    private readonly config: ConfigService,
   ) {}
 
   async findOrCreateGoogleUser(profile: GoogleProfilePayload): Promise<User> {
+    const adminEmails = this.config.get<AuthConfig>('auth')!.adminEmails;
+    const desiredRole: UserRole =
+      profile.email && adminEmails.includes(profile.email.toLowerCase())
+        ? 'admin'
+        : 'user';
+
     const existing =
       (await this.users.findOne({ where: { googleId: profile.googleId } })) ||
       (profile.email
@@ -41,6 +50,11 @@ export class AuthService {
       }
       if (profile.avatar && existing.avatar !== profile.avatar) {
         existing.avatar = profile.avatar;
+        dirty = true;
+      }
+      // Auto-promote configured admin emails on every login, but never demote.
+      if (desiredRole === 'admin' && existing.role !== 'admin') {
+        existing.role = 'admin';
         dirty = true;
       }
       if (dirty) await this.users.save(existing);
@@ -61,6 +75,7 @@ export class AuthService {
         `https://picsum.photos/seed/avatar-${handle}/200/200`,
       bio: '',
       socials: {},
+      role: desiredRole,
     });
     return this.users.save(user);
   }

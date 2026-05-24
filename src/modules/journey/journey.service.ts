@@ -13,7 +13,7 @@ export class JourneyService {
   list(userId: string): Promise<JourneyEntry[]> {
     return this.entries.find({
       where: { userId },
-      relations: { venue: true },
+      relations: { venue: { city: true } },
       order: { addedAt: 'DESC' },
     });
   }

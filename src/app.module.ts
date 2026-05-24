@@ -3,9 +3,12 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { resolve } from 'path';
+import { existsSync, mkdirSync } from 'fs';
 import configuration from './config/configuration';
 import { envValidationSchema } from './config/env.validation';
-import { ThrottleConfig } from './config/configuration';
+import { ThrottleConfig, UploadConfig } from './config/configuration';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { HealthController } from './common/controllers/health.controller';
@@ -23,6 +26,7 @@ import { JourneyModule } from './modules/journey/journey.module';
 import { ToursModule } from './modules/tours/tours.module';
 import { DiscoverModule } from './modules/discover/discover.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { UploadsModule } from './modules/uploads/uploads.module';
 
 @Module({
   imports: [
@@ -33,6 +37,32 @@ import { AdminModule } from './modules/admin/admin.module';
       cache: true,
     }),
     CacheModule.register({ isGlobal: true, ttl: 60 * 1000, max: 5_000 }),
+    ServeStaticModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (cfg: ConfigService) => {
+        const upload = cfg.get<UploadConfig>('upload')!;
+        const rootPath = resolve(upload.diskPath);
+        // Ensure the volume directory exists on boot so multer + ServeStatic
+        // never race on a missing folder right after deploy.
+        if (!existsSync(rootPath)) {
+          try {
+            mkdirSync(rootPath, { recursive: true });
+          } catch {
+            /* read-only on some envs — ignore */
+          }
+        }
+        return [
+          {
+            rootPath,
+            serveRoot: '/uploads',
+            serveStaticOptions: {
+              maxAge: 7 * 24 * 60 * 60 * 1000,
+              fallthrough: true,
+            },
+          },
+        ];
+      },
+    }),
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (cfg: ConfigService) => {
@@ -66,6 +96,7 @@ import { AdminModule } from './modules/admin/admin.module';
     ToursModule,
     DiscoverModule,
     AdminModule,
+    UploadsModule,
   ],
   controllers: [HealthController],
   providers: [

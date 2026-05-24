@@ -19,6 +19,22 @@ export interface JwtConfig {
   expiresIn: string;
 }
 
+export interface AuthConfig {
+  adminEmails: string[];
+}
+
+export interface UploadConfig {
+  // Absolute path on disk where uploaded files are written. On Railway this
+  // should be a mounted volume mount path like /data/uploads so files survive
+  // deploys + restarts.
+  diskPath: string;
+  // Public origin (no trailing slash) at which uploaded files are served via
+  // /uploads/<filename>. When empty, the request's own host is used.
+  publicUrl: string;
+  // Maximum file size in bytes — 8 MB by default.
+  maxBytes: number;
+}
+
 export interface OAuthClientConfig {
   clientId: string;
   clientSecret: string;
@@ -43,6 +59,8 @@ export interface RootConfig {
   app: AppConfig;
   database: DatabaseConfig;
   jwt: JwtConfig;
+  auth: AuthConfig;
+  upload: UploadConfig;
   google: OAuthClientConfig;
   instagram: OAuthClientConfig;
   throttle: ThrottleConfig;
@@ -69,6 +87,17 @@ export default (): RootConfig => ({
   jwt: {
     secret: process.env.JWT_SECRET!,
     expiresIn: process.env.JWT_EXPIRES_IN ?? '7d',
+  },
+  auth: {
+    adminEmails: (process.env.ADMIN_EMAILS ?? '')
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
+  },
+  upload: {
+    diskPath: process.env.UPLOAD_DIR ?? '/data/uploads',
+    publicUrl: process.env.UPLOAD_PUBLIC_URL ?? '',
+    maxBytes: parseInt(process.env.UPLOAD_MAX_BYTES ?? '8388608', 10),
   },
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID ?? '',

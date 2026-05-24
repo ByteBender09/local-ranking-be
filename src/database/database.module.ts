@@ -26,6 +26,11 @@ import { DatabaseConfig } from '../config/configuration';
           entities: [City, Venue, User, Review, Vote, CheckIn, JourneyEntry, Tour],
           migrations: [__dirname + '/migrations/*.{js,ts}'],
           synchronize: db.synchronize,
+          // Auto-run pending migrations on boot in production so a redeploy
+          // is enough — no shell access needed. Disable for local dev.
+          migrationsRun:
+            db.synchronize === false &&
+            process.env.NODE_ENV === 'production',
           logging: db.logging,
           poolSize: db.poolSize,
           ssl: db.ssl ? { rejectUnauthorized: false } : false,

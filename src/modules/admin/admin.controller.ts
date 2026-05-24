@@ -16,24 +16,37 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { User } from '../../database/entities';
 import { ChangeRoleDto } from './dto/change-role.dto';
+import { AdminOverview, AdminService } from './admin.service';
 
-@Controller('admin/users')
+@Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('admin')
 export class AdminController {
-  constructor(@InjectRepository(User) private readonly users: Repository<User>) {}
+  constructor(
+    @InjectRepository(User) private readonly users: Repository<User>,
+    private readonly admin: AdminService,
+  ) {}
 
-  @Get()
+  @Get('overview')
+  overview(): Promise<AdminOverview> {
+    return this.admin.overview();
+  }
+
+  @Get('users')
   search(@Query('q') q?: string): Promise<User[]> {
     if (!q) return this.users.find({ take: 50, order: { createdAt: 'DESC' } });
     const term = `%${q}%`;
     return this.users.find({
-      where: [{ handle: ILike(term) }, { name: ILike(term) }, { email: ILike(term) }],
+      where: [
+        { handle: ILike(term) },
+        { name: ILike(term) },
+        { email: ILike(term) },
+      ],
       take: 50,
     });
   }
 
-  @Patch(':id/role')
+  @Patch('users/:id/role')
   async changeRole(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ChangeRoleDto,

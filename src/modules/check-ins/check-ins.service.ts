@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { CheckIn, User, Venue } from '../../database/entities';
+import { CheckIn, User, Venue, Vote } from '../../database/entities';
 import { CreateCheckInDto, UpdateMemoryDto } from './dto/check-in.dto';
 
 @Injectable()
@@ -10,7 +10,7 @@ export class CheckInsService {
   listByUser(userId: string): Promise<CheckIn[]> {
     return this.dataSource.getRepository(CheckIn).find({
       where: { userId },
-      relations: { venue: true },
+      relations: { venue: { city: true } },
       order: { createdAt: 'DESC' },
     });
   }
@@ -70,7 +70,23 @@ export class CheckInsService {
     await this.dataSource.transaction(async (manager) => {
       const venue = await manager.findOne(Venue, { where: { slug: venueSlug } });
       if (!venue) throw new NotFoundException(`Venue not found: ${venueSlug}`);
-      const result = await manager.delete(CheckIn, { venueId: venue.id, userId });
+
+      // If the user had an upvote on this venue, drop the denormalised counter
+      // before deleting the vote — votes require a check-in.
+      const existingVote = await manager.findOne(Vote, {
+        where: { venueId: venue.id, userId },
+      });
+      if (existingVote?.value === 1) {
+        await manager.decrement(Venue, { id: venue.id }, 'upvotes', 1);
+      }
+      if (existingVote) {
+        await manager.delete(Vote, { id: existingVote.id });
+      }
+
+      const result = await manager.delete(CheckIn, {
+        venueId: venue.id,
+        userId,
+      });
       if (result.affected) {
         await manager.decrement(User, { id: userId }, 'checkInCount', 1);
       }

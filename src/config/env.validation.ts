@@ -16,6 +16,11 @@ export const envValidationSchema = Joi.object({
 
   JWT_SECRET: Joi.string().min(16).required(),
   JWT_EXPIRES_IN: Joi.string().default('7d'),
+  ADMIN_EMAILS: Joi.string().allow('').default(''),
+
+  UPLOAD_DIR: Joi.string().default('/data/uploads'),
+  UPLOAD_PUBLIC_URL: Joi.string().allow('').default(''),
+  UPLOAD_MAX_BYTES: Joi.number().default(8 * 1024 * 1024),
 
   GOOGLE_CLIENT_ID: Joi.string().allow('').default(''),
   GOOGLE_CLIENT_SECRET: Joi.string().allow('').default(''),

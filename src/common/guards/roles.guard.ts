@@ -10,6 +10,14 @@ import { ROLES_KEY } from '../decorators/roles.decorator';
 import { AuthenticatedUser } from '../decorators/current-user.decorator';
 import type { UserRole } from '../../database/entities';
 
+// admin includes business, business includes user. @Roles('business') therefore
+// admits both business and admin; @Roles('admin') admits admin only.
+const HIERARCHY: Record<UserRole, number> = {
+  user: 0,
+  business: 1,
+  admin: 2,
+};
+
 @Injectable()
 export class RolesGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
@@ -21,10 +29,14 @@ export class RolesGuard implements CanActivate {
     );
     if (!required || required.length === 0) return true;
 
-    const req = context.switchToHttp().getRequest<Request & { user?: AuthenticatedUser }>();
+    const req = context
+      .switchToHttp()
+      .getRequest<Request & { user?: AuthenticatedUser }>();
     const user = req.user;
     if (!user) throw new ForbiddenException('Authentication required');
-    if (!required.includes(user.role)) {
+
+    const minRequired = Math.min(...required.map((r) => HIERARCHY[r]));
+    if (HIERARCHY[user.role] < minRequired) {
       throw new ForbiddenException('Insufficient role');
     }
     return true;

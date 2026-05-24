@@ -1,0 +1,171 @@
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { City, Venue } from '../../database/entities';
+import {
+  CreateAdminVenueDto,
+  UpdateAdminVenueDto,
+} from './dto/admin-venue.dto';
+import { UpdateCityDto } from './dto/update-city.dto';
+import { CitiesService } from '../cities/cities.service';
+
+const slugify = (s: string): string =>
+  s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 140);
+
+@Injectable()
+export class AdminCitiesVenuesService {
+  constructor(
+    @InjectRepository(City) private readonly cities: Repository<City>,
+    @InjectRepository(Venue) private readonly venues: Repository<Venue>,
+    private readonly citiesService: CitiesService,
+  ) {}
+
+  // CITIES ----------------------------------------------------------
+
+  listCities(): Promise<City[]> {
+    return this.cities.find({ order: { name: 'ASC' } });
+  }
+
+  async getCity(slug: string): Promise<City> {
+    const city = await this.cities.findOne({ where: { slug } });
+    if (!city) throw new NotFoundException('City not found');
+    return city;
+  }
+
+  async updateCity(slug: string, dto: UpdateCityDto): Promise<City> {
+    const city = await this.getCity(slug);
+    if (dto.name !== undefined) city.name = dto.name;
+    if (dto.nameEn !== undefined) city.nameEn = dto.nameEn;
+    if (dto.region !== undefined) city.region = dto.region;
+    if (dto.coverImage !== undefined) city.coverImage = dto.coverImage;
+    if (dto.tagline !== undefined) city.tagline = dto.tagline;
+    if (dto.description !== undefined) city.description = dto.description;
+    if (dto.highlights !== undefined) city.highlights = dto.highlights;
+    if (dto.lat !== undefined) city.lat = dto.lat;
+    if (dto.lng !== undefined) city.lng = dto.lng;
+    const saved = await this.cities.save(city);
+    await this.citiesService.invalidateBySlug(slug);
+    return saved;
+  }
+
+  // VENUES ----------------------------------------------------------
+
+  listVenuesByCity(citySlug: string): Promise<Venue[]> {
+    return this.venues
+      .createQueryBuilder('v')
+      .innerJoinAndSelect('v.city', 'c')
+      .where('c.slug = :citySlug', { citySlug })
+      .orderBy('v.is_published', 'DESC')
+      .addOrderBy('v.upvotes', 'DESC')
+      .getMany();
+  }
+
+  async getVenue(slug: string): Promise<Venue> {
+    const v = await this.venues.findOne({
+      where: { slug },
+      relations: { city: true },
+    });
+    if (!v) throw new NotFoundException('Venue not found');
+    return v;
+  }
+
+  async createVenue(dto: CreateAdminVenueDto): Promise<Venue> {
+    const city = await this.cities.findOne({ where: { id: dto.cityId } });
+    if (!city) throw new BadRequestException('City does not exist');
+
+    const baseSlug = `${slugify(dto.name)}-${city.slug}`;
+    const slug = await this.uniqueSlug(baseSlug);
+
+    const venue = this.venues.create({
+      slug,
+      name: dto.name,
+      category: dto.category,
+      cityId: city.id,
+      district: dto.district,
+      address: dto.address,
+      description: dto.description,
+      images: dto.images,
+      tags: dto.tags,
+      hours: dto.hours,
+      priceRange: dto.priceRange,
+      lat: dto.lat,
+      lng: dto.lng,
+      isPublished: dto.isPublished ?? true,
+      rating: 0,
+      reviewCount: 0,
+      upvotes: 0,
+    });
+    const saved = await this.venues.save(venue);
+    // venueCount changed for this city — bust the listing cache.
+    await this.citiesService.invalidateBySlug(city.slug);
+    return saved;
+  }
+
+  async updateVenue(slug: string, dto: UpdateAdminVenueDto): Promise<Venue> {
+    const venue = await this.getVenue(slug);
+    if (dto.cityId !== undefined) {
+      const city = await this.cities.findOne({ where: { id: dto.cityId } });
+      if (!city) throw new BadRequestException('City does not exist');
+      venue.cityId = city.id;
+    }
+    if (dto.name !== undefined) venue.name = dto.name;
+    if (dto.category !== undefined) venue.category = dto.category;
+    if (dto.district !== undefined) venue.district = dto.district;
+    if (dto.address !== undefined) venue.address = dto.address;
+    if (dto.description !== undefined) venue.description = dto.description;
+    if (dto.images !== undefined) venue.images = dto.images;
+    if (dto.tags !== undefined) venue.tags = dto.tags;
+    if (dto.hours !== undefined) venue.hours = dto.hours;
+    if (dto.priceRange !== undefined) venue.priceRange = dto.priceRange;
+    if (dto.lat !== undefined) venue.lat = dto.lat;
+    if (dto.lng !== undefined) venue.lng = dto.lng;
+    if (dto.isPublished !== undefined) venue.isPublished = dto.isPublished;
+    const saved = await this.venues.save(venue);
+    await this.invalidateForVenue(saved);
+    return saved;
+  }
+
+  async deleteVenue(slug: string): Promise<void> {
+    const venue = await this.getVenue(slug);
+    await this.venues.delete({ id: venue.id });
+    await this.invalidateForVenue(venue);
+  }
+
+  async setPublished(slug: string, isPublished: boolean): Promise<Venue> {
+    const venue = await this.getVenue(slug);
+    venue.isPublished = isPublished;
+    const saved = await this.venues.save(venue);
+    await this.invalidateForVenue(saved);
+    return saved;
+  }
+
+  private async invalidateForVenue(venue: Venue): Promise<void> {
+    if (venue.city?.slug) {
+      await this.citiesService.invalidateBySlug(venue.city.slug);
+      return;
+    }
+    // Fall back to invalidating the whole list when we don't have a slug.
+    await this.citiesService.invalidateAll();
+  }
+
+  private async uniqueSlug(base: string): Promise<string> {
+    let candidate = base;
+    let i = 1;
+    while (await this.venues.exists({ where: { slug: candidate } })) {
+      i += 1;
+      candidate = `${base}-${i}`;
+    }
+    return candidate;
+  }
+}

@@ -28,7 +28,8 @@ export class VenuesRepository {
   findPaged(filter: ListVenuesDto): Promise<[Venue[], number]> {
     const qb = this.repo
       .createQueryBuilder('venue')
-      .innerJoinAndSelect('venue.city', 'city');
+      .innerJoinAndSelect('venue.city', 'city')
+      .where('venue.is_published = true');
 
     if (filter.citySlug)
       qb.andWhere('city.slug = :citySlug', { citySlug: filter.citySlug });
@@ -47,10 +48,12 @@ export class VenuesRepository {
   }
 
   findBySlug(slug: string): Promise<Venue | null> {
+    // Public detail view also hides unpublished venues from anonymous users.
     return this.repo
       .createQueryBuilder('venue')
       .innerJoinAndSelect('venue.city', 'city')
       .where('venue.slug = :slug', { slug })
+      .andWhere('venue.is_published = true')
       .getOne();
   }
 
@@ -58,6 +61,7 @@ export class VenuesRepository {
     return this.repo
       .createQueryBuilder('venue')
       .innerJoinAndSelect('venue.city', 'city')
+      .where('venue.is_published = true')
       .orderBy('venue.upvotes', 'DESC')
       .limit(limit)
       .getMany();
@@ -68,9 +72,11 @@ export class VenuesRepository {
     return this.repo
       .createQueryBuilder('venue')
       .innerJoinAndSelect('venue.city', 'city')
-      .where('LOWER(venue.name) LIKE :term', { term })
-      .orWhere('LOWER(venue.district) LIKE :term', { term })
-      .orWhere('LOWER(venue.address) LIKE :term', { term })
+      .where('venue.is_published = true')
+      .andWhere(
+        '(LOWER(venue.name) LIKE :term OR LOWER(venue.district) LIKE :term OR LOWER(venue.address) LIKE :term)',
+        { term },
+      )
       .orderBy('venue.upvotes', 'DESC')
       .limit(limit)
       .getMany();

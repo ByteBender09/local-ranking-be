@@ -96,6 +96,10 @@ export class Venue {
   @Column({ type: 'double precision' })
   lng: number;
 
+  @Index()
+  @Column({ type: 'boolean', name: 'is_published', default: true })
+  isPublished: boolean;
+
   @OneToMany(() => Review, (r) => r.venue)
   reviews: Review[];
 
