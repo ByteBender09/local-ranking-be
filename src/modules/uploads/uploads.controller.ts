@@ -73,9 +73,18 @@ export class UploadsController {
     if (!file) throw new BadRequestException('Missing file');
     const cfg = this.config.get<UploadConfig>('upload')!;
 
+    // Prefer the request's own origin when developing locally — the
+    // configured publicUrl typically points to production, so dev uploads
+    // would return a prod URL that 404s because the file only exists on
+    // the dev disk.
+    const reqHost = req.get('host') ?? 'localhost';
+    const isLocalRequest = /(^localhost(:|$))|(^127\.0\.0\.1)|(^192\.168\.)/.test(
+      reqHost,
+    );
     const origin =
-      cfg.publicUrl ||
-      `${req.protocol}://${req.get('host') ?? 'localhost'}`;
+      isLocalRequest || !cfg.publicUrl
+        ? `${req.protocol}://${reqHost}`
+        : cfg.publicUrl;
     const publicPath = `/uploads/${file.filename}`;
     return {
       url: `${origin.replace(/\/$/, '')}${publicPath}`,

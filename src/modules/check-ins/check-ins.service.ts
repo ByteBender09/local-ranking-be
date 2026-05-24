@@ -1,6 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { CheckIn, User, Venue, Vote } from '../../database/entities';
+import {
+  CheckIn,
+  JourneyEntry,
+  User,
+  Venue,
+  Vote,
+} from '../../database/entities';
 import { CreateCheckInDto, UpdateMemoryDto } from './dto/check-in.dto';
 
 @Injectable()
@@ -39,6 +45,22 @@ export class CheckInsService {
       });
       await manager.save(created);
       await manager.increment(User, { id: userId }, 'checkInCount', 1);
+
+      // Auto-add to the user's journey so the venue shows up in the timeline
+      // immediately after a check-in. Skip if already saved — re-checking in
+      // shouldn't bump the journey order.
+      const existingJourney = await manager.findOne(JourneyEntry, {
+        where: { venueId: venue.id, userId },
+      });
+      if (!existingJourney) {
+        await manager.save(
+          manager.create(JourneyEntry, {
+            venueId: venue.id,
+            userId,
+            note: null,
+          }),
+        );
+      }
       return created;
     });
   }

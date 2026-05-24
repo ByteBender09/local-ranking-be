@@ -1,21 +1,46 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import { JourneyEntry, Venue } from '../../database/entities';
+import { CheckIn, JourneyEntry, Venue } from '../../database/entities';
 
 @Injectable()
 export class JourneyService {
   constructor(
     @InjectRepository(JourneyEntry) private readonly entries: Repository<JourneyEntry>,
     @InjectRepository(Venue) private readonly venues: Repository<Venue>,
+    @InjectRepository(CheckIn) private readonly checkIns: Repository<CheckIn>,
   ) {}
 
-  list(userId: string): Promise<JourneyEntry[]> {
+  async list(userId: string): Promise<JourneyEntry[]> {
+    // Self-heal: anyone who checked in before the auto-add-journey logic
+    // was wired up has check-ins without matching journey rows. On every
+    // /me/journey read we top up the missing entries so the timeline reflects
+    // their full history instead of starting empty.
+    await this.backfillFromCheckIns(userId);
     return this.entries.find({
       where: { userId },
       relations: { venue: { city: true } },
       order: { addedAt: 'DESC' },
     });
+  }
+
+  private async backfillFromCheckIns(userId: string): Promise<void> {
+    const userCheckIns = await this.checkIns.find({
+      where: { userId },
+      select: { venueId: true },
+    });
+    if (userCheckIns.length === 0) return;
+    const checkInVenueIds = userCheckIns.map((c) => c.venueId);
+    const existingEntries = await this.entries.find({
+      where: { userId, venueId: In(checkInVenueIds) },
+      select: { venueId: true },
+    });
+    const have = new Set(existingEntries.map((e) => e.venueId));
+    const missing = checkInVenueIds.filter((id) => !have.has(id));
+    if (missing.length === 0) return;
+    await this.entries.insert(
+      missing.map((venueId) => ({ userId, venueId, note: null })),
+    );
   }
 
   async add(venueSlug: string, userId: string, note?: string): Promise<JourneyEntry> {

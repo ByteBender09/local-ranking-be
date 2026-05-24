@@ -27,6 +27,18 @@ export class JourneyController {
     return this.service.list(user.id);
   }
 
+  // NOTE: static routes ('seed') MUST be declared before dynamic ':slug'
+  // — NestJS matches in declaration order, so POST /me/journey/seed used to
+  // hit the add() handler with slug='seed' and 404.
+  @Post('seed')
+  async seed(
+    @Body() body: SeedJourneyDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<{ added: number }> {
+    const added = await this.service.seed(user.id, body.venueIds);
+    return { added };
+  }
+
   @Post(':slug')
   add(
     @Param('slug') slug: string,
@@ -43,14 +55,5 @@ export class JourneyController {
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<void> {
     await this.service.remove(slug, user.id);
-  }
-
-  @Post('seed')
-  async seed(
-    @Body() body: SeedJourneyDto,
-    @CurrentUser() user: AuthenticatedUser,
-  ): Promise<{ added: number }> {
-    const added = await this.service.seed(user.id, body.venueIds);
-    return { added };
   }
 }

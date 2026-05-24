@@ -32,6 +32,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { MailModule } from './modules/mail/mail.module';
 import { BrandingModule } from './modules/branding/branding.module';
+import { PartnersModule } from './modules/partners/partners.module';
 
 @Module({
   imports: [
@@ -105,6 +106,7 @@ import { BrandingModule } from './modules/branding/branding.module';
     UploadsModule,
     MailModule,
     BrandingModule,
+    PartnersModule,
   ],
   controllers: [HealthController],
   providers: [
