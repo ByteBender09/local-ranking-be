@@ -13,6 +13,10 @@ import { Vote } from './vote.entity';
 import { CheckIn } from './check-in.entity';
 import { JourneyEntry } from './journey-entry.entity';
 
+export type UserRole = 'user' | 'business' | 'admin';
+
+export const USER_ROLES: UserRole[] = ['user', 'business', 'admin'];
+
 export interface UserSocials {
   instagram?: string;
   tiktok?: string;
@@ -29,6 +33,10 @@ export class User {
   @Index({ unique: true })
   @Column({ type: 'varchar', length: 40 })
   handle: string;
+
+  @Index()
+  @Column({ type: 'varchar', length: 16, default: 'user' })
+  role: UserRole;
 
   @Index({ unique: true, where: '"google_id" IS NOT NULL' })
   @Column({ type: 'varchar', length: 64, name: 'google_id', nullable: true })

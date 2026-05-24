@@ -12,6 +12,7 @@ export class ToursService {
       .createQueryBuilder('t')
       .innerJoin('t.city', 'c')
       .addSelect('c.slug')
+      .where('t.is_published = true')
       .orderBy('t.rating', 'DESC')
       .limit(limit);
     if (citySlug) qb.andWhere('c.slug = :citySlug', { citySlug });

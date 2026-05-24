@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User } from '../../database/entities';
+import { User, UserRole } from '../../database/entities';
 import {
   AuthSession,
   GoogleProfilePayload,
@@ -76,7 +76,11 @@ export class AuthService {
   }
 
   issueSession(user: User): AuthSession {
-    const payload: JwtPayload = { sub: user.id, handle: user.handle };
+    const payload: JwtPayload = {
+      sub: user.id,
+      handle: user.handle,
+      role: user.role,
+    };
     return {
       accessToken: this.jwt.sign(payload),
       user: {
@@ -84,13 +88,14 @@ export class AuthService {
         handle: user.handle,
         name: user.name,
         avatar: user.avatar,
+        role: user.role,
       },
     };
   }
 
-  issueLinkToken(user: { id: string; handle: string }): string {
+  issueLinkToken(user: { id: string; handle: string; role: UserRole }): string {
     return this.jwt.sign(
-      { sub: user.id, handle: user.handle },
+      { sub: user.id, handle: user.handle, role: user.role },
       { expiresIn: '10m' },
     );
   }

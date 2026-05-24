@@ -321,6 +321,37 @@ async function seedTours(ds: DataSource, cities: Map<string, City>): Promise<voi
   }
 }
 
+async function seedRoleAccounts(ds: DataSource): Promise<void> {
+  const repo = ds.getRepository(User);
+  const demos: Array<{ handle: string; name: string; role: 'admin' | 'business' }> = [
+    { handle: 'admin', name: 'Site Admin', role: 'admin' },
+    { handle: 'tourbiz', name: 'Demo Tour Company', role: 'business' },
+  ];
+  for (const d of demos) {
+    const existing = await repo.findOne({ where: { handle: d.handle } });
+    if (existing) {
+      if (existing.role !== d.role) {
+        existing.role = d.role;
+        await repo.save(existing);
+      }
+      continue;
+    }
+    await repo.save(
+      repo.create({
+        handle: d.handle,
+        name: d.name,
+        role: d.role,
+        avatar: `https://picsum.photos/seed/avatar-${d.handle}/200/200`,
+        bio: d.role === 'admin' ? 'Quản trị viên hệ thống' : 'Công ty tour demo',
+        socials: {},
+        bookingEnabled: false,
+        checkInCount: 0,
+        followerCount: 0,
+      }),
+    );
+  }
+}
+
 async function main(): Promise<void> {
   const ds = new DataSource({ ...dataSourceOptions, synchronize: true });
   await ds.initialize();
@@ -340,6 +371,9 @@ async function main(): Promise<void> {
 
   await seedTours(ds, cities);
   console.log('✓ Tours seeded');
+
+  await seedRoleAccounts(ds);
+  console.log('✓ Role accounts seeded (handle=admin, handle=tourbiz)');
 
   await ds.destroy();
   console.log('Done.');

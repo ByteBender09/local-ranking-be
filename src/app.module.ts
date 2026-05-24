@@ -2,13 +2,14 @@ import { CacheModule } from '@nestjs/cache-manager';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import configuration from './config/configuration';
 import { envValidationSchema } from './config/env.validation';
 import { ThrottleConfig } from './config/configuration';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { HealthController } from './common/controllers/health.controller';
+import { IpThrottlerGuard } from './common/guards/ip-throttler.guard';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
@@ -21,6 +22,7 @@ import { CheckInsModule } from './modules/check-ins/check-ins.module';
 import { JourneyModule } from './modules/journey/journey.module';
 import { ToursModule } from './modules/tours/tours.module';
 import { DiscoverModule } from './modules/discover/discover.module';
+import { AdminModule } from './modules/admin/admin.module';
 
 @Module({
   imports: [
@@ -35,7 +37,21 @@ import { DiscoverModule } from './modules/discover/discover.module';
       inject: [ConfigService],
       useFactory: (cfg: ConfigService) => {
         const t = cfg.get<ThrottleConfig>('throttle')!;
-        return [{ ttl: t.ttl * 1000, limit: t.limit }];
+        return {
+          throttlers: [
+            {
+              name: t.short.name,
+              ttl: t.short.ttl * 1000,
+              limit: t.short.limit,
+            },
+            {
+              name: t.default.name,
+              ttl: t.default.ttl * 1000,
+              limit: t.default.limit,
+            },
+            { name: t.auth.name, ttl: t.auth.ttl * 1000, limit: t.auth.limit },
+          ],
+        };
       },
     }),
     DatabaseModule,
@@ -49,11 +65,12 @@ import { DiscoverModule } from './modules/discover/discover.module';
     JourneyModule,
     ToursModule,
     DiscoverModule,
+    AdminModule,
   ],
   controllers: [HealthController],
   providers: [
+    { provide: APP_GUARD, useClass: IpThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
   ],

@@ -8,6 +8,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
@@ -18,13 +19,11 @@ import {
   CurrentUser,
 } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
-import {
-  GoogleProfilePayload,
-  InstagramLinkPayload,
-} from './dto/auth.dto';
+import { GoogleProfilePayload, InstagramLinkPayload } from './dto/auth.dto';
 import { OAuthClientConfig } from '../../config/configuration';
 
 @Controller('auth')
+@Throttle({ auth: { ttl: 60_000, limit: 10 } })
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
@@ -55,6 +54,7 @@ export class AuthController {
     }
   }
 
+  @SkipThrottle({ auth: true })
   @UseGuards(JwtAuthGuard)
   @Get('me')
   me(@CurrentUser() user: AuthenticatedUser): AuthenticatedUser {
@@ -63,9 +63,9 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Post('instagram/token')
-  issueInstagramLinkToken(
-    @CurrentUser() user: AuthenticatedUser,
-  ): { token: string } {
+  issueInstagramLinkToken(@CurrentUser() user: AuthenticatedUser): {
+    token: string;
+  } {
     return { token: this.authService.issueLinkToken(user) };
   }
 

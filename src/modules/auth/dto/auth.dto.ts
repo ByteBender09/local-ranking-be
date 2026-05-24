@@ -1,6 +1,9 @@
+import type { UserRole } from '../../../database/entities';
+
 export interface JwtPayload {
   sub: string;
   handle: string;
+  role: UserRole;
 }
 
 export interface AuthSession {
@@ -10,6 +13,7 @@ export interface AuthSession {
     handle: string;
     name: string;
     avatar: string;
+    role: UserRole;
   };
 }
 

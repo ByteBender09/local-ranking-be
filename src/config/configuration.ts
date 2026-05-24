@@ -1,16 +1,14 @@
 export interface AppConfig {
   nodeEnv: 'development' | 'production' | 'test';
   port: number;
-  apiPrefix: string;
   corsOrigins: string[];
+  trustProxy: number;
+  bodyLimit: string;
 }
 
 export interface DatabaseConfig {
-  host: string;
-  port: number;
-  username: string;
-  password: string;
-  name: string;
+  url: string;
+  ssl: boolean;
   synchronize: boolean;
   logging: boolean;
   poolSize: number;
@@ -29,9 +27,16 @@ export interface OAuthClientConfig {
   failureRedirect: string;
 }
 
-export interface ThrottleConfig {
+export interface ThrottleTier {
+  name: string;
   ttl: number;
   limit: number;
+}
+
+export interface ThrottleConfig {
+  short: ThrottleTier;
+  default: ThrottleTier;
+  auth: ThrottleTier;
 }
 
 export interface RootConfig {
@@ -47,18 +52,16 @@ export default (): RootConfig => ({
   app: {
     nodeEnv: (process.env.NODE_ENV as AppConfig['nodeEnv']) ?? 'development',
     port: parseInt(process.env.PORT ?? '4000', 10),
-    apiPrefix: process.env.API_PREFIX ?? 'api',
     corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:3000')
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean),
+    trustProxy: parseInt(process.env.TRUST_PROXY ?? '0', 10),
+    bodyLimit: process.env.BODY_LIMIT ?? '1mb',
   },
   database: {
-    host: process.env.DB_HOST!,
-    port: parseInt(process.env.DB_PORT ?? '5432', 10),
-    username: process.env.DB_USERNAME!,
-    password: process.env.DB_PASSWORD ?? '',
-    name: process.env.DB_NAME!,
+    url: process.env.DATABASE_URL!,
+    ssl: process.env.DB_SSL === 'true',
     synchronize: process.env.DB_SYNCHRONIZE === 'true',
     logging: process.env.DB_LOGGING === 'true',
     poolSize: parseInt(process.env.DB_POOL_SIZE ?? '20', 10),
@@ -82,7 +85,20 @@ export default (): RootConfig => ({
     failureRedirect: process.env.INSTAGRAM_FAILURE_REDIRECT ?? '',
   },
   throttle: {
-    ttl: parseInt(process.env.THROTTLE_TTL ?? '60', 10),
-    limit: parseInt(process.env.THROTTLE_LIMIT ?? '120', 10),
+    short: {
+      name: 'short',
+      ttl: parseInt(process.env.THROTTLE_SHORT_TTL ?? '1', 10),
+      limit: parseInt(process.env.THROTTLE_SHORT_LIMIT ?? '20', 10),
+    },
+    default: {
+      name: 'default',
+      ttl: parseInt(process.env.THROTTLE_DEFAULT_TTL ?? '60', 10),
+      limit: parseInt(process.env.THROTTLE_DEFAULT_LIMIT ?? '120', 10),
+    },
+    auth: {
+      name: 'auth',
+      ttl: parseInt(process.env.THROTTLE_AUTH_TTL ?? '60', 10),
+      limit: parseInt(process.env.THROTTLE_AUTH_LIMIT ?? '10', 10),
+    },
   },
 });

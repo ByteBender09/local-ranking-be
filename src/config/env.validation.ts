@@ -5,14 +5,11 @@ export const envValidationSchema = Joi.object({
     .valid('development', 'production', 'test')
     .default('development'),
   PORT: Joi.number().default(4000),
-  API_PREFIX: Joi.string().default('api'),
   CORS_ORIGINS: Joi.string().default('http://localhost:3000'),
+  TRUST_PROXY: Joi.number().integer().min(0).default(0),
 
-  DB_HOST: Joi.string().required(),
-  DB_PORT: Joi.number().default(5432),
-  DB_USERNAME: Joi.string().required(),
-  DB_PASSWORD: Joi.string().allow('').required(),
-  DB_NAME: Joi.string().required(),
+  DATABASE_URL: Joi.string().uri({ scheme: ['postgres', 'postgresql'] }).required(),
+  DB_SSL: Joi.boolean().default(false),
   DB_SYNCHRONIZE: Joi.boolean().default(false),
   DB_LOGGING: Joi.boolean().default(false),
   DB_POOL_SIZE: Joi.number().default(20),
@@ -32,6 +29,12 @@ export const envValidationSchema = Joi.object({
   INSTAGRAM_SUCCESS_REDIRECT: Joi.string().allow('').default(''),
   INSTAGRAM_FAILURE_REDIRECT: Joi.string().allow('').default(''),
 
-  THROTTLE_TTL: Joi.number().default(60),
-  THROTTLE_LIMIT: Joi.number().default(120),
+  THROTTLE_SHORT_TTL: Joi.number().default(1),
+  THROTTLE_SHORT_LIMIT: Joi.number().default(20),
+  THROTTLE_DEFAULT_TTL: Joi.number().default(60),
+  THROTTLE_DEFAULT_LIMIT: Joi.number().default(120),
+  THROTTLE_AUTH_TTL: Joi.number().default(60),
+  THROTTLE_AUTH_LIMIT: Joi.number().default(10),
+
+  BODY_LIMIT: Joi.string().default('1mb'),
 });

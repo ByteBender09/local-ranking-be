@@ -11,6 +11,7 @@ import {
 import { bigintToNumber, numericToNumber } from '../transformers';
 import { City } from './city.entity';
 import type { Category } from './venue.entity';
+import { User } from './user.entity';
 
 export interface TourProviderInfo {
   name: string;
@@ -18,8 +19,20 @@ export interface TourProviderInfo {
   verified: boolean;
 }
 
+export interface TourPromotion {
+  id: string;
+  title: string;
+  description?: string;
+  code?: string;
+  discountPct?: number;
+  url?: string;
+  validFrom?: string;
+  validTo?: string;
+}
+
 @Entity({ name: 'tours' })
 @Index('idx_tours_city_category', ['cityId', 'category'])
+@Index('idx_tours_owner', ['ownerId'])
 export class Tour {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -67,6 +80,38 @@ export class Tour {
 
   @Column({ type: 'jsonb' })
   provider: TourProviderInfo;
+
+  // Description / itinerary the business writes themselves
+  @Column({ type: 'text', default: '' })
+  description: string;
+
+  // External booking URL the business wants traffic to go to
+  @Column({ type: 'varchar', length: 500, name: 'booking_url', nullable: true })
+  bookingUrl: string | null;
+
+  // Venues from the system catalog this tour visits
+  @Column({
+    type: 'uuid',
+    array: true,
+    name: 'venue_ids',
+    default: () => "ARRAY[]::uuid[]",
+  })
+  venueIds: string[];
+
+  // Embedded promotions / discount codes for this tour
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  promotions: TourPromotion[];
+
+  // null = system-managed catalog entry. Non-null = a business owns it.
+  @Column({ type: 'uuid', name: 'owner_id', nullable: true })
+  ownerId: string | null;
+
+  @ManyToOne(() => User, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'owner_id' })
+  owner: User | null;
+
+  @Column({ type: 'boolean', name: 'is_published', default: true })
+  isPublished: boolean;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
