@@ -77,6 +77,8 @@ export class AuthController {
     instagramHandle: string | null;
     bookingEnabled: boolean;
     bookingPriceVnd: number | null;
+    isBlocked: boolean;
+    blockedReason: string | null;
   }> {
     const u = await this.users.findOneOrFail({ where: { id: actor.id } });
     return {
@@ -89,6 +91,8 @@ export class AuthController {
       instagramHandle: u.instagramHandle,
       bookingEnabled: u.bookingEnabled,
       bookingPriceVnd: u.bookingPriceVnd,
+      isBlocked: u.isBlocked,
+      blockedReason: u.blockedReason,
     };
   }
 

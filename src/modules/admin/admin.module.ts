@@ -13,6 +13,8 @@ import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { AdminCitiesVenuesController } from './admin-cities-venues.controller';
 import { AdminCitiesVenuesService } from './admin-venues.service';
+import { AdminToursController } from './admin-tours.controller';
+import { AdminBrandsController } from './admin-brands.controller';
 import { CitiesModule } from '../cities/cities.module';
 
 @Module({
@@ -20,7 +22,12 @@ import { CitiesModule } from '../cities/cities.module';
     TypeOrmModule.forFeature([User, Venue, City, Tour, Review, Vote, CheckIn]),
     CitiesModule,
   ],
-  controllers: [AdminController, AdminCitiesVenuesController],
+  controllers: [
+    AdminController,
+    AdminCitiesVenuesController,
+    AdminToursController,
+    AdminBrandsController,
+  ],
   providers: [AdminService, AdminCitiesVenuesService],
 })
 export class AdminModule {}

@@ -4,8 +4,10 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ServeStaticModule } from '@nestjs/serve-static';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { resolve } from 'path';
 import { existsSync, mkdirSync } from 'fs';
+import { User } from './database/entities';
 import configuration from './config/configuration';
 import { envValidationSchema } from './config/env.validation';
 import { ThrottleConfig, UploadConfig } from './config/configuration';
@@ -13,6 +15,7 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { HealthController } from './common/controllers/health.controller';
 import { IpThrottlerGuard } from './common/guards/ip-throttler.guard';
+import { BlockedReadOnlyGuard } from './common/guards/blocked-readonly.guard';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
@@ -27,6 +30,8 @@ import { ToursModule } from './modules/tours/tours.module';
 import { DiscoverModule } from './modules/discover/discover.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
+import { MailModule } from './modules/mail/mail.module';
+import { BrandingModule } from './modules/branding/branding.module';
 
 @Module({
   imports: [
@@ -85,6 +90,7 @@ import { UploadsModule } from './modules/uploads/uploads.module';
       },
     }),
     DatabaseModule,
+    TypeOrmModule.forFeature([User]),
     AuthModule,
     CitiesModule,
     VenuesModule,
@@ -97,11 +103,14 @@ import { UploadsModule } from './modules/uploads/uploads.module';
     DiscoverModule,
     AdminModule,
     UploadsModule,
+    MailModule,
+    BrandingModule,
   ],
   controllers: [HealthController],
   providers: [
     { provide: APP_GUARD, useClass: IpThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: BlockedReadOnlyGuard },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
   ],

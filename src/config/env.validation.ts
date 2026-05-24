@@ -42,4 +42,10 @@ export const envValidationSchema = Joi.object({
   THROTTLE_AUTH_LIMIT: Joi.number().default(10),
 
   BODY_LIMIT: Joi.string().default('1mb'),
+
+  RESEND_API_KEY: Joi.string().allow('').default(''),
+  RESEND_FROM_EMAIL: Joi.string().email().default('noreply@homnaydidau.local'),
+  RESEND_FROM_NAME: Joi.string().default('Hôm Nay Đi Đâu'),
+  APP_PUBLIC_URL: Joi.string().uri().default('http://localhost:3000'),
+  BACKEND_PUBLIC_URL: Joi.string().uri().default('http://localhost:4000'),
 });

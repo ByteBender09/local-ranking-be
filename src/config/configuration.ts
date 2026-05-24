@@ -55,6 +55,14 @@ export interface ThrottleConfig {
   auth: ThrottleTier;
 }
 
+export interface MailConfig {
+  resendApiKey: string;
+  fromEmail: string;
+  fromName: string;
+  appPublicUrl: string;
+  backendPublicUrl: string;
+}
+
 export interface RootConfig {
   app: AppConfig;
   database: DatabaseConfig;
@@ -64,6 +72,7 @@ export interface RootConfig {
   google: OAuthClientConfig;
   instagram: OAuthClientConfig;
   throttle: ThrottleConfig;
+  mail: MailConfig;
 }
 
 export default (): RootConfig => ({
@@ -129,5 +138,13 @@ export default (): RootConfig => ({
       ttl: parseInt(process.env.THROTTLE_AUTH_TTL ?? '60', 10),
       limit: parseInt(process.env.THROTTLE_AUTH_LIMIT ?? '10', 10),
     },
+  },
+  mail: {
+    resendApiKey: process.env.RESEND_API_KEY ?? '',
+    fromEmail: process.env.RESEND_FROM_EMAIL ?? 'noreply@homnaydidau.local',
+    fromName: process.env.RESEND_FROM_NAME ?? 'Hôm Nay Đi Đâu',
+    appPublicUrl: process.env.APP_PUBLIC_URL ?? 'http://localhost:3000',
+    backendPublicUrl:
+      process.env.BACKEND_PUBLIC_URL ?? 'http://localhost:4000',
   },
 });

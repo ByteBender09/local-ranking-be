@@ -17,6 +17,10 @@ export interface TourProviderInfo {
   name: string;
   shortName: string;
   verified: boolean;
+  // Optional: URL of the brand's logo. Denormalised into the tour's
+  // `provider` JSON so the FE can render the brand's logo on each tour card
+  // without an extra user lookup. Synced whenever the owner's branding changes.
+  logoUrl?: string | null;
 }
 
 export interface TourPromotion {
@@ -60,8 +64,16 @@ export class Tour {
   @Column({ type: 'bigint', name: 'price_vnd', transformer: bigintToNumber })
   priceVnd: number;
 
-  @Column({ type: 'varchar', length: 500 })
+  // Cover image. Empty when the business hasn't uploaded any photos —
+  // VenueCards then fall back to the brand logo (provider.logoUrl). Kept as
+  // a denormalised first-image pointer so list endpoints don't have to peek
+  // into the `images` array.
+  @Column({ type: 'varchar', length: 500, default: '' })
   image: string;
+
+  // Photo gallery — shown in the tour detail modal. Empty array is fine.
+  @Column({ type: 'text', array: true, default: () => "ARRAY[]::text[]" })
+  images: string[];
 
   @Column({
     type: 'numeric',

@@ -37,7 +37,16 @@ export class CreateTourDto {
   @Type(() => Number) @IsInt() @Min(1) @Max(72) durationHours: number;
   @Type(() => Number) @IsInt() @Min(0) priceVnd: number;
 
-  @IsString() @MaxLength(500) image: string;
+  // Image is now optional. When missing the service falls back to the first
+  // entry of `images`, then the owner's brand logo, so tours always have a
+  // sensible visual without forcing a hero upload per tour.
+  @IsOptional() @IsString() @MaxLength(500) image?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  images?: string[];
 
   @IsOptional() @IsString() @MaxLength(5_000) description?: string;
 
@@ -58,10 +67,18 @@ export class CreateTourDto {
 
 export class UpdateTourDto {
   @IsOptional() @IsString() @MaxLength(200) title?: string;
+  @IsOptional() @IsUUID() cityId?: string;
   @IsOptional() @IsIn(CATEGORIES) category?: Category;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(72) durationHours?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) priceVnd?: number;
   @IsOptional() @IsString() @MaxLength(500) image?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  images?: string[];
+
   @IsOptional() @IsString() @MaxLength(5_000) description?: string;
   @IsOptional() @IsUrl() @MaxLength(500) bookingUrl?: string;
   @IsOptional() @IsBoolean() isPublished?: boolean;

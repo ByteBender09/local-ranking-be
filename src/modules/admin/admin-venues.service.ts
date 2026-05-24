@@ -5,11 +5,16 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { PaginatedResponse } from '../../common/dto/pagination.dto';
 import { City, Venue } from '../../database/entities';
 import {
   CreateAdminVenueDto,
   UpdateAdminVenueDto,
 } from './dto/admin-venue.dto';
+import {
+  AdminVenueSort,
+  ListAdminVenuesDto,
+} from './dto/list-admin-venues.dto';
 import { UpdateCityDto } from './dto/update-city.dto';
 import { CitiesService } from '../cities/cities.service';
 
@@ -69,6 +74,58 @@ export class AdminCitiesVenuesService {
       .orderBy('v.is_published', 'DESC')
       .addOrderBy('v.upvotes', 'DESC')
       .getMany();
+  }
+
+  async listVenuesPaged(
+    filter: ListAdminVenuesDto,
+  ): Promise<PaginatedResponse<Venue>> {
+    const qb = this.venues
+      .createQueryBuilder('venue')
+      .innerJoinAndSelect('venue.city', 'city');
+
+    if (filter.citySlug)
+      qb.andWhere('city.slug = :citySlug', { citySlug: filter.citySlug });
+    if (filter.category)
+      qb.andWhere('venue.category = :category', { category: filter.category });
+    if (filter.isPublished !== undefined) {
+      qb.andWhere('venue.is_published = :pub', {
+        pub: filter.isPublished === 'true',
+      });
+    }
+    if (filter.q && filter.q.trim()) {
+      const term = `%${filter.q.trim().toLowerCase()}%`;
+      qb.andWhere(
+        '(LOWER(venue.name) LIKE :term OR LOWER(venue.district) LIKE :term OR LOWER(venue.address) LIKE :term OR LOWER(venue.slug) LIKE :term)',
+        { term },
+      );
+    }
+
+    this.applyAdminSort(qb, filter.sort);
+    qb.addOrderBy('venue.id', 'ASC').skip(filter.skip).take(filter.limit);
+
+    const [items, total] = await qb.getManyAndCount();
+    return new PaginatedResponse(items, total, filter.page, filter.limit);
+  }
+
+  private applyAdminSort(
+    qb: ReturnType<Repository<Venue>['createQueryBuilder']>,
+    sort: AdminVenueSort,
+  ): void {
+    switch (sort) {
+      case 'oldest':
+        qb.orderBy('venue.createdAt', 'ASC');
+        return;
+      case 'upvotes':
+        qb.orderBy('venue.upvotes', 'DESC');
+        return;
+      case 'name':
+        qb.orderBy('venue.name', 'ASC');
+        return;
+      case 'newest':
+      default:
+        qb.orderBy('venue.createdAt', 'DESC');
+        return;
+    }
   }
 
   async getVenue(slug: string): Promise<Venue> {

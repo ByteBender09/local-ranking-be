@@ -7,17 +7,20 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { PaginatedResponse } from '../../common/dto/pagination.dto';
 import { City, Venue } from '../../database/entities';
 import { UpdateCityDto } from './dto/update-city.dto';
 import {
   CreateAdminVenueDto,
   UpdateAdminVenueDto,
 } from './dto/admin-venue.dto';
+import { ListAdminVenuesDto } from './dto/list-admin-venues.dto';
 import { AdminCitiesVenuesService } from './admin-venues.service';
 
 @Controller('admin')
@@ -51,6 +54,13 @@ export class AdminCitiesVenuesController {
   @Get('cities/:slug/venues')
   listVenuesByCity(@Param('slug') slug: string): Promise<Venue[]> {
     return this.svc.listVenuesByCity(slug);
+  }
+
+  @Get('venues')
+  listVenues(
+    @Query() filter: ListAdminVenuesDto,
+  ): Promise<PaginatedResponse<Venue>> {
+    return this.svc.listVenuesPaged(filter);
   }
 
   @Get('venues/:slug')

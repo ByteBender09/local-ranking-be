@@ -90,6 +90,49 @@ export class User {
   @Column({ type: 'timestamptz', name: 'instagram_linked_at', nullable: true })
   instagramLinkedAt: Date | null;
 
+  // Business branding (1-1 with user). Tours owned by this user inherit the
+  // brand name/logo. emailVerified determines the blue check on tour cards.
+  @Column({ type: 'varchar', length: 120, name: 'brand_name', nullable: true })
+  brandName: string | null;
+
+  @Column({ type: 'varchar', length: 16, name: 'brand_short_name', nullable: true })
+  brandShortName: string | null;
+
+  @Column({ type: 'varchar', length: 500, name: 'brand_logo_url', nullable: true })
+  brandLogoUrl: string | null;
+
+  @Column({ type: 'text', name: 'brand_description', default: '' })
+  brandDescription: string;
+
+  @Column({ type: 'varchar', length: 500, name: 'brand_website_url', nullable: true })
+  brandWebsiteUrl: string | null;
+
+  @Column({ type: 'varchar', length: 200, name: 'brand_contact_email', nullable: true })
+  brandContactEmail: string | null;
+
+  @Column({ type: 'boolean', name: 'brand_email_verified', default: false })
+  brandEmailVerified: boolean;
+
+  @Column({ type: 'timestamptz', name: 'brand_email_verified_at', nullable: true })
+  brandEmailVerifiedAt: Date | null;
+
+  @Index({ unique: true, where: '"brand_verification_token" IS NOT NULL' })
+  @Column({ type: 'varchar', length: 96, name: 'brand_verification_token', nullable: true })
+  brandVerificationToken: string | null;
+
+  @Column({ type: 'timestamptz', name: 'brand_verification_token_expires_at', nullable: true })
+  brandVerificationTokenExpiresAt: Date | null;
+
+  @Index()
+  @Column({ type: 'boolean', name: 'is_blocked', default: false })
+  isBlocked: boolean;
+
+  @Column({ type: 'timestamptz', name: 'blocked_at', nullable: true })
+  blockedAt: Date | null;
+
+  @Column({ type: 'varchar', length: 280, name: 'blocked_reason', nullable: true })
+  blockedReason: string | null;
+
   @OneToMany(() => Review, (r) => r.user)
   reviews: Review[];
 
