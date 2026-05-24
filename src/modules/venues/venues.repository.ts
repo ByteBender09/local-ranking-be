@@ -10,7 +10,10 @@ export class VenuesRepository {
     @InjectRepository(Venue) private readonly repo: Repository<Venue>,
   ) {}
 
-  private orderBy(sort: VenueSort): { field: string; direction: 'ASC' | 'DESC' } {
+  private orderBy(sort: VenueSort): {
+    field: string;
+    direction: 'ASC' | 'DESC';
+  } {
     switch (sort) {
       case 'rating':
         return { field: 'venue.rating', direction: 'DESC' };
@@ -27,9 +30,12 @@ export class VenuesRepository {
       .createQueryBuilder('venue')
       .innerJoinAndSelect('venue.city', 'city');
 
-    if (filter.citySlug) qb.andWhere('city.slug = :citySlug', { citySlug: filter.citySlug });
-    if (filter.category) qb.andWhere('venue.category = :category', { category: filter.category });
-    if (filter.district) qb.andWhere('venue.district = :district', { district: filter.district });
+    if (filter.citySlug)
+      qb.andWhere('city.slug = :citySlug', { citySlug: filter.citySlug });
+    if (filter.category)
+      qb.andWhere('venue.category = :category', { category: filter.category });
+    if (filter.district)
+      qb.andWhere('venue.district = :district', { district: filter.district });
 
     const order = this.orderBy(filter.sort);
     qb.orderBy(order.field, order.direction)

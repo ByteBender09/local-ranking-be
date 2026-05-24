@@ -6,7 +6,9 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 
 @Injectable()
 export class UsersService {
-  constructor(@InjectRepository(User) private readonly users: Repository<User>) {}
+  constructor(
+    @InjectRepository(User) private readonly users: Repository<User>,
+  ) {}
 
   async findByHandle(handle: string): Promise<User> {
     const user = await this.users.findOne({ where: { handle } });
@@ -40,7 +42,8 @@ export class UsersService {
 
     if (patch.name !== undefined) user.name = patch.name.slice(0, 40);
     if (patch.bio !== undefined) user.bio = patch.bio.slice(0, 280);
-    if (patch.bookingEnabled !== undefined) user.bookingEnabled = patch.bookingEnabled;
+    if (patch.bookingEnabled !== undefined)
+      user.bookingEnabled = patch.bookingEnabled;
     if (patch.bookingPriceVnd !== undefined)
       user.bookingPriceVnd = Math.max(0, Math.round(patch.bookingPriceVnd));
     if (patch.citySlug !== undefined) user.citySlug = patch.citySlug || null;
