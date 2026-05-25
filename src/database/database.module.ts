@@ -9,6 +9,7 @@ import {
   Vote,
   CheckIn,
   JourneyEntry,
+  SavedVenue,
   Tour,
 } from './entities';
 import { DatabaseConfig } from '../config/configuration';
@@ -23,7 +24,7 @@ import { DatabaseConfig } from '../config/configuration';
         return {
           type: 'postgres' as const,
           url: db.url,
-          entities: [City, Venue, User, Review, Vote, CheckIn, JourneyEntry, Tour],
+          entities: [City, Venue, User, Review, Vote, CheckIn, JourneyEntry, SavedVenue, Tour],
           migrations: [__dirname + '/migrations/*.{js,ts}'],
           synchronize: db.synchronize,
           // Auto-run pending migrations on boot in production so a redeploy

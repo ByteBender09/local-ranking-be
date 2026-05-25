@@ -12,6 +12,7 @@ import { Review } from './review.entity';
 import { Vote } from './vote.entity';
 import { CheckIn } from './check-in.entity';
 import { JourneyEntry } from './journey-entry.entity';
+import { SavedVenue } from './saved-venue.entity';
 
 export type UserRole = 'user' | 'business' | 'admin';
 
@@ -144,6 +145,9 @@ export class User {
 
   @OneToMany(() => JourneyEntry, (j) => j.user)
   journeyEntries: JourneyEntry[];
+
+  @OneToMany(() => SavedVenue, (s) => s.user)
+  savedVenues: SavedVenue[];
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

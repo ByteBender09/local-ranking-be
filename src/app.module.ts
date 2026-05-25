@@ -26,6 +26,7 @@ import { ReviewsModule } from './modules/reviews/reviews.module';
 import { VotesModule } from './modules/votes/votes.module';
 import { CheckInsModule } from './modules/check-ins/check-ins.module';
 import { JourneyModule } from './modules/journey/journey.module';
+import { SavedVenuesModule } from './modules/saved-venues/saved-venues.module';
 import { ToursModule } from './modules/tours/tours.module';
 import { DiscoverModule } from './modules/discover/discover.module';
 import { AdminModule } from './modules/admin/admin.module';
@@ -100,6 +101,7 @@ import { PartnersModule } from './modules/partners/partners.module';
     VotesModule,
     CheckInsModule,
     JourneyModule,
+    SavedVenuesModule,
     ToursModule,
     DiscoverModule,
     AdminModule,

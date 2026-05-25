@@ -8,5 +8,6 @@ export { Review } from './review.entity';
 export { Vote } from './vote.entity';
 export { CheckIn } from './check-in.entity';
 export { JourneyEntry } from './journey-entry.entity';
+export { SavedVenue } from './saved-venue.entity';
 export { Tour } from './tour.entity';
 export type { TourProviderInfo, TourPromotion } from './tour.entity';

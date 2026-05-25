@@ -9,6 +9,7 @@ import {
   Vote,
   CheckIn,
   JourneyEntry,
+  SavedVenue,
   Tour,
 } from './entities';
 
@@ -19,7 +20,7 @@ const ssl = process.env.DB_SSL === 'true';
 export const dataSourceOptions: DataSourceOptions = {
   type: 'postgres',
   url: process.env.DATABASE_URL,
-  entities: [City, Venue, User, Review, Vote, CheckIn, JourneyEntry, Tour],
+  entities: [City, Venue, User, Review, Vote, CheckIn, JourneyEntry, SavedVenue, Tour],
   migrations: [__dirname + '/migrations/*.{js,ts}'],
   synchronize: process.env.DB_SYNCHRONIZE === 'true',
   logging: process.env.DB_LOGGING === 'true',

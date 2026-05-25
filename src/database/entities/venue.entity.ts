@@ -15,6 +15,7 @@ import { Review } from './review.entity';
 import { Vote } from './vote.entity';
 import { CheckIn } from './check-in.entity';
 import { JourneyEntry } from './journey-entry.entity';
+import { SavedVenue } from './saved-venue.entity';
 
 export type Category =
   | 'cafe'
@@ -111,6 +112,9 @@ export class Venue {
 
   @OneToMany(() => JourneyEntry, (j) => j.venue)
   journeyEntries: JourneyEntry[];
+
+  @OneToMany(() => SavedVenue, (s) => s.venue)
+  savedBy: SavedVenue[];
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
