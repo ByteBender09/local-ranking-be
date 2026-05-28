@@ -68,15 +68,36 @@ redirect URI, and put the credentials in `.env`.
 
 ## Auth flow
 
+### Web
+
 1. Frontend redirects user to `GET /auth/google` → Google consent → callback.
-2. Backend creates/updates a user, signs a JWT, redirects to
-   `GOOGLE_SUCCESS_REDIRECT?token=<jwt>`.
-3. Frontend stores the token and sends `Authorization: Bearer <jwt>` on every
-   protected call.
-4. To link Instagram, frontend calls `POST /auth/instagram/token` to mint a
-   short-lived link token, then redirects to
-   `GET /auth/instagram?token=<link-token>`. After consent we save the
-   Instagram username + access token on the user.
+2. Backend creates/updates a user, signs a JWT, sets the `hnd_token` HttpOnly
+   cookie, redirects to `GOOGLE_SUCCESS_REDIRECT`.
+3. Every subsequent call from the browser sends the cookie automatically.
+
+### Mobile (Flutter)
+
+1. App opens `GET /auth/google?mobile=1` inside an
+   ASWebAuthenticationSession / Chrome Custom Tab.
+2. `GoogleAuthGuard` forwards `state=mobile` to Google so it round-trips
+   back in the callback.
+3. On success the callback redirects to
+   `GOOGLE_MOBILE_SUCCESS_REDIRECT?token=<jwt>` (default
+   `homnaydidau://auth/callback?token=<jwt>`). **No cookie is set** —
+   mobile keeps the token in `flutter_secure_storage` and sends it as
+   `Authorization: Bearer <jwt>`.
+4. On failure the same URL is hit with `?error=auth_failed` so the app
+   can show a toast instead of hanging on the auth sheet.
+
+Set `GOOGLE_MOBILE_SUCCESS_REDIRECT` in `.env` only if you want a
+different scheme than `homnaydidau://`.
+
+### Instagram
+
+To link Instagram, frontend calls `POST /auth/instagram/token` to mint a
+short-lived link token, then redirects to
+`GET /auth/instagram?token=<link-token>`. After consent we save the
+Instagram username + access token on the user.
 
 ## Key endpoints
 
@@ -114,7 +135,8 @@ redirect URI, and put the credentials in `.env`.
 | GET    | `/discover/editors-pick`             | –    |                              |
 | GET    | `/discover/hidden-gems`              | –    |                              |
 | GET    | `/discover/for-me`                   | JWT  | personalised picks           |
-| GET    | `/auth/google`                       | –    | start Google OAuth           |
+| GET    | `/auth/google`                       | –    | start Google OAuth (web)     |
+| GET    | `/auth/google?mobile=1`              | –    | start Google OAuth (mobile)  |
 | GET    | `/auth/google/callback`              | –    | OAuth callback               |
 | POST   | `/auth/instagram/token`              | JWT  | issue Instagram link token   |
 | GET    | `/auth/instagram?token=`             | –    | start Instagram OAuth        |

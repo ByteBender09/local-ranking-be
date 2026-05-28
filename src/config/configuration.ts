@@ -41,6 +41,11 @@ export interface OAuthClientConfig {
   callbackUrl: string;
   successRedirect: string;
   failureRedirect: string;
+  // Used by the mobile OAuth flow only. When Google start was hit with
+  // `?mobile=1`, the callback redirects here instead of `successRedirect`,
+  // with the issued JWT appended as `?token=<jwt>`. The Flutter app captures
+  // this via flutter_web_auth_2's custom-scheme callback.
+  mobileSuccessRedirect: string;
 }
 
 export interface ThrottleTier {
@@ -114,6 +119,9 @@ export default (): RootConfig => ({
     callbackUrl: process.env.GOOGLE_CALLBACK_URL ?? '',
     successRedirect: process.env.GOOGLE_SUCCESS_REDIRECT ?? '',
     failureRedirect: process.env.GOOGLE_FAILURE_REDIRECT ?? '',
+    mobileSuccessRedirect:
+      process.env.GOOGLE_MOBILE_SUCCESS_REDIRECT ??
+      'homnaydidau://auth/callback',
   },
   instagram: {
     clientId: process.env.INSTAGRAM_CLIENT_ID ?? '',
@@ -121,6 +129,7 @@ export default (): RootConfig => ({
     callbackUrl: process.env.INSTAGRAM_CALLBACK_URL ?? '',
     successRedirect: process.env.INSTAGRAM_SUCCESS_REDIRECT ?? '',
     failureRedirect: process.env.INSTAGRAM_FAILURE_REDIRECT ?? '',
+    mobileSuccessRedirect: '',
   },
   throttle: {
     short: {

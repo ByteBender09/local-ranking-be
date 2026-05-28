@@ -27,6 +27,12 @@ export const envValidationSchema = Joi.object({
   GOOGLE_CALLBACK_URL: Joi.string().allow('').default(''),
   GOOGLE_SUCCESS_REDIRECT: Joi.string().allow('').default(''),
   GOOGLE_FAILURE_REDIRECT: Joi.string().allow('').default(''),
+  // Custom URL scheme target for the Flutter mobile OAuth callback.
+  // Defaults to homnaydidau://auth/callback which matches the scheme
+  // registered in AndroidManifest.xml / Info.plist of the mobile app.
+  GOOGLE_MOBILE_SUCCESS_REDIRECT: Joi.string()
+    .allow('')
+    .default('homnaydidau://auth/callback'),
 
   INSTAGRAM_CLIENT_ID: Joi.string().allow('').default(''),
   INSTAGRAM_CLIENT_SECRET: Joi.string().allow('').default(''),

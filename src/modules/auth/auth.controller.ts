@@ -50,18 +50,52 @@ export class AuthController {
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
   async googleCallback(
-    @Req() req: Request & { user: GoogleProfilePayload },
+    @Req()
+    req: Request & {
+      user: GoogleProfilePayload;
+      query: { state?: string };
+    },
     @Res() res: Response,
   ): Promise<void> {
     const google = this.config.get<OAuthClientConfig>('google')!;
+    const isMobile = req.query.state === 'mobile';
+
     try {
       const user = await this.authService.findOrCreateGoogleUser(req.user);
       const session = this.authService.issueSession(user);
+
+      if (isMobile) {
+        // Mobile flow: deliver the JWT to the Flutter app via the custom
+        // URL scheme. No cookie — mobile keeps the token in secure storage.
+        res.redirect(
+          this.appendQuery(google.mobileSuccessRedirect, {
+            token: session.accessToken,
+          }),
+        );
+        return;
+      }
+
       this.setAccessCookie(res, session.accessToken);
       res.redirect(google.successRedirect);
     } catch {
+      if (isMobile) {
+        res.redirect(
+          this.appendQuery(google.mobileSuccessRedirect, {
+            error: 'auth_failed',
+          }),
+        );
+        return;
+      }
       res.redirect(google.failureRedirect);
     }
+  }
+
+  // Custom URL schemes (homnaydidau://) are not RFC 3986 hierarchical URIs,
+  // so the Node URL class refuses to parse them. Append query params by hand.
+  private appendQuery(base: string, params: Record<string, string>): string {
+    const usp = new URLSearchParams(params);
+    const separator = base.includes('?') ? '&' : '?';
+    return `${base}${separator}${usp.toString()}`;
   }
 
   @SkipThrottle({ auth: true })
