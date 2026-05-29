@@ -16,6 +16,7 @@ import {
 } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { User } from '../../database/entities';
+import { PublicUserDto } from './dto/public-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UsersService } from './users.service';
 
@@ -25,18 +26,20 @@ export class UsersController {
 
   @Public()
   @Get('leaderboard')
-  leaderboard(
+  async leaderboard(
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
-  ): Promise<User[]> {
-    return this.users.leaderboard(Math.min(Math.max(limit, 1), 100));
+  ): Promise<PublicUserDto[]> {
+    const users = await this.users.leaderboard(Math.min(Math.max(limit, 1), 100));
+    return users.map(PublicUserDto.from);
   }
 
   @Public()
   @Get('bookable')
-  bookable(
+  async bookable(
     @Query('limit', new DefaultValuePipe(12), ParseIntPipe) limit: number,
-  ): Promise<User[]> {
-    return this.users.bookable(Math.min(Math.max(limit, 1), 50));
+  ): Promise<PublicUserDto[]> {
+    const users = await this.users.bookable(Math.min(Math.max(limit, 1), 50));
+    return users.map(PublicUserDto.from);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -58,7 +61,8 @@ export class UsersController {
 
   @Public()
   @Get(':handle')
-  byHandle(@Param('handle') handle: string): Promise<User> {
-    return this.users.findByHandle(handle);
+  async byHandle(@Param('handle') handle: string): Promise<PublicUserDto> {
+    const user = await this.users.findByHandle(handle);
+    return PublicUserDto.from(user);
   }
 }

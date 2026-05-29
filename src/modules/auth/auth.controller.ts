@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   HttpCode,
@@ -23,7 +24,13 @@ import {
   CurrentUser,
 } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
-import { GoogleProfilePayload, InstagramLinkPayload } from './dto/auth.dto';
+import {
+  AuthSession,
+  GoogleProfilePayload,
+  InstagramLinkPayload,
+} from './dto/auth.dto';
+import { FirebaseLoginDto } from './dto/firebase-login.dto';
+import { FirebaseAdminService } from './firebase-admin.service';
 import {
   AppConfig,
   OAuthClientConfig,
@@ -38,6 +45,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly config: ConfigService,
+    private readonly firebaseAdmin: FirebaseAdminService,
     @InjectRepository(User) private readonly users: Repository<User>,
   ) {}
 
@@ -88,6 +96,25 @@ export class AuthController {
       }
       res.redirect(google.failureRedirect);
     }
+  }
+
+  // Mobile (Flutter) Google sign-in. The app authenticates with Firebase
+  // client-side and posts the resulting Firebase ID token here; we verify it,
+  // find-or-create the user, and return the app's own JWT. This deliberately
+  // reuses `findOrCreateGoogleUser`/`issueSession` and does NOT touch the
+  // website's `/auth/google` cookie flow.
+  @Public()
+  @Post('firebase')
+  @HttpCode(200)
+  async firebaseLogin(@Body() body: FirebaseLoginDto): Promise<AuthSession> {
+    const identity = await this.firebaseAdmin.verifyIdToken(body.idToken);
+    const user = await this.authService.findOrCreateGoogleUser({
+      googleId: identity.uid,
+      email: identity.email ?? '',
+      name: identity.name ?? 'Explorer',
+      avatar: identity.picture ?? '',
+    });
+    return this.authService.issueSession(user);
   }
 
   // Custom URL schemes (homnaydidau://) are not RFC 3986 hierarchical URIs,
