@@ -163,8 +163,10 @@ export class CheckInsService {
     return latest;
   }
 
-  // Delete a specific check-in. A check-in whose memory was created more than
-  // 30 minutes ago is locked and cannot be removed.
+  // Delete a specific check-in. Rule:
+  //  - No memory yet → deletable any time.
+  //  - Memory created < 30 min ago → still deletable.
+  //  - Memory created ≥ 30 min ago → LOCKED (cannot delete the check-in).
   async remove(checkInId: string, userId: string): Promise<void> {
     await this.dataSource.transaction(async (manager) => {
       const ci = await manager.findOne(CheckIn, { where: { id: checkInId } });
@@ -177,7 +179,7 @@ export class CheckInsService {
         Date.now() - ci.memoryCreatedAt.getTime() > MEMORY_LOCK_MS
       ) {
         throw new ForbiddenException(
-          'Kỉ niệm đã được khóa sau 30 phút và không thể xóa.',
+          'Kỉ niệm đã được khóa sau 30 phút — không thể xóa lượt check-in này.',
         );
       }
 

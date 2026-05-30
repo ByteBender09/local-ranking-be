@@ -6,8 +6,16 @@ import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import { json, urlencoded } from 'express';
 import helmet from 'helmet';
+import { types as pgTypes } from 'pg';
 import { AppModule } from './app.module';
 import { AppConfig, UploadConfig } from './config/configuration';
+
+// `timestamp without time zone` columns (TypeORM's default for @CreateDateColumn)
+// store UTC, but node-postgres parses them in the SERVER process's local
+// timezone — so on a non-UTC host (e.g. dev in UTC+7) every timestamp comes
+// back shifted, making "vừa xong" show as "7 giờ trước". Force these (OID 1114)
+// to be interpreted as UTC. OID 1184 (timestamptz) is already correct.
+pgTypes.setTypeParser(1114, (v: string) => new Date(`${v}Z`));
 
 const REQUEST_TIMEOUT_MS = 15_000;
 
