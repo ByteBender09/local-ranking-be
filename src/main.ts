@@ -7,7 +7,7 @@ import cookieParser from 'cookie-parser';
 import { json, urlencoded } from 'express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
-import { AppConfig } from './config/configuration';
+import { AppConfig, UploadConfig } from './config/configuration';
 
 const REQUEST_TIMEOUT_MS = 15_000;
 
@@ -21,6 +21,13 @@ async function bootstrap(): Promise<void> {
   // Trust the proxy hop count so req.ip resolves to the real client when behind
   // a load balancer / CDN. 0 = direct, 1 = single proxy, etc.
   app.set('trust proxy', appConfig.trustProxy);
+
+  // Expose the resolved upload config on the Express app so the multer
+  // `destination` callbacks (which only have access to `req`, not Nest DI)
+  // write to the SAME directory ServeStatic serves from. Without this they
+  // fall back to `./uploads` (ephemeral container disk) while files are served
+  // from the mounted volume (e.g. /data/uploads) → every uploaded image 404s.
+  app.set('uploadConfig', config.get<UploadConfig>('upload'));
 
   app.use(
     helmet({
