@@ -2,10 +2,12 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Cache } from 'cache-manager';
-import { Repository } from 'typeorm';
-import { CheckIn, Vote, Venue } from '../../database/entities';
+import { In, Repository } from 'typeorm';
+import { CheckIn, SavedVenue, Vote, Venue } from '../../database/entities';
 
 const CACHE_TTL_MS = 60 * 1000;
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class DiscoverService {
@@ -13,31 +15,75 @@ export class DiscoverService {
     @InjectRepository(Venue) private readonly venues: Repository<Venue>,
     @InjectRepository(CheckIn) private readonly checkIns: Repository<CheckIn>,
     @InjectRepository(Vote) private readonly votes: Repository<Vote>,
+    @InjectRepository(SavedVenue) private readonly saved: Repository<SavedVenue>,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
+  // "Đang hot trong tuần" — venues ranked by the rise in upvotes over the last
+  // 7 days (rolling window over Vote.createdAt). No reset job needed: the window
+  // slides forward continuously. Falls back to all-time upvotes when a fresh
+  // week hasn't produced enough signal yet.
   async trending(limit = 8): Promise<Venue[]> {
-    return this.cached(`discover:trending:${limit}`, () =>
-      this.venues
-        .createQueryBuilder('v')
-        .innerJoinAndSelect('v.city', 'c')
-        .where('v.is_published = true')
-        .orderBy('v.upvotes', 'DESC')
+    return this.cached(`discover:trending:${limit}`, async () => {
+      const since = new Date(Date.now() - WEEK_MS);
+      const ranked = await this.votes
+        .createQueryBuilder('vote')
+        .innerJoin(
+          'venues',
+          'v',
+          'v.id = vote.venue_id AND v.is_published = true',
+        )
+        .select('vote.venue_id', 'venueId')
+        .addSelect('COUNT(*)', 'cnt')
+        .where('vote.value = 1')
+        .andWhere('vote.created_at >= :since', { since })
+        .groupBy('vote.venue_id')
+        .orderBy('cnt', 'DESC')
         .limit(limit)
-        .getMany(),
-    );
+        .getRawMany<{ venueId: string }>();
+
+      const ids = await this.fillWithTopUpvotes(
+        ranked.map((r) => r.venueId),
+        limit,
+      );
+      return this.fetchVenuesInOrder(ids);
+    });
   }
 
-  async recentlyLiked(limit = 8): Promise<Venue[]> {
-    return this.cached(`discover:recently-liked:${limit}`, () =>
-      this.venues
-        .createQueryBuilder('v')
-        .innerJoinAndSelect('v.city', 'c')
-        .where('v.is_published = true')
-        .orderBy('v.updated_at', 'DESC')
+  // "Cộng đồng đang ưa thích" — venues ranked by how many users favorited
+  // (saved) them over the last 30 days (rolling window over SavedVenue.addedAt).
+  // Favoriting requires no prior check-in. Saved rows are wiped monthly, so this
+  // naturally reflects the current month's enthusiasm.
+  async communityFavorites(limit = 8): Promise<Venue[]> {
+    return this.cached(`discover:community-favorites:${limit}`, async () => {
+      const since = new Date(Date.now() - MONTH_MS);
+      const ranked = await this.saved
+        .createQueryBuilder('s')
+        .innerJoin(
+          'venues',
+          'v',
+          'v.id = s.venue_id AND v.is_published = true',
+        )
+        .select('s.venue_id', 'venueId')
+        .addSelect('COUNT(*)', 'cnt')
+        .where('s.added_at >= :since', { since })
+        .groupBy('s.venue_id')
+        .orderBy('cnt', 'DESC')
         .limit(limit)
-        .getMany(),
-    );
+        .getRawMany<{ venueId: string }>();
+
+      const ids = await this.fillWithTopUpvotes(
+        ranked.map((r) => r.venueId),
+        limit,
+      );
+      return this.fetchVenuesInOrder(ids);
+    });
+  }
+
+  // Backward-compatible alias. The old "recently liked" section now maps to the
+  // community-favorites ranking so existing clients keep working.
+  recentlyLiked(limit = 8): Promise<Venue[]> {
+    return this.communityFavorites(limit);
   }
 
   async editorsPick(limit = 8): Promise<Venue[]> {
@@ -86,9 +132,13 @@ export class DiscoverService {
     });
     if (userCheckIns.length === 0) return this.editorsPick(limit);
 
-    const visitedIds = userCheckIns
-      .map((c) => c.venueId)
-      .filter((id): id is string => Boolean(id));
+    const visitedIds = [
+      ...new Set(
+        userCheckIns
+          .map((c) => c.venueId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
 
     // Build affinity maps from the check-in history.
     const categoryWeight = new Map<string, number>();
@@ -99,10 +149,7 @@ export class DiscoverService {
         ci.venue.category,
         (categoryWeight.get(ci.venue.category) ?? 0) + 2,
       );
-      cityWeight.set(
-        ci.venue.cityId,
-        (cityWeight.get(ci.venue.cityId) ?? 0) + 1,
-      );
+      cityWeight.set(ci.venue.cityId, (cityWeight.get(ci.venue.cityId) ?? 0) + 1);
     }
 
     // Upvotes on those check-ins amplify category affinity — the user
@@ -151,6 +198,41 @@ export class DiscoverService {
       .sort((a, b) => b.score - a.score)
       .slice(0, limit)
       .map((s) => s.v);
+  }
+
+  // Top up a ranked id list with the all-time most-upvoted published venues so
+  // a section is never empty / short when a rolling window is sparse.
+  private async fillWithTopUpvotes(
+    ids: string[],
+    limit: number,
+  ): Promise<string[]> {
+    if (ids.length >= limit) return ids;
+    const qb = this.venues
+      .createQueryBuilder('v')
+      .select('v.id', 'id')
+      .where('v.is_published = true');
+    if (ids.length > 0) {
+      qb.andWhere('v.id NOT IN (:...ids)', { ids });
+    }
+    const extra = await qb
+      .orderBy('v.upvotes', 'DESC')
+      .addOrderBy('v.rating', 'DESC')
+      .limit(limit - ids.length)
+      .getRawMany<{ id: string }>();
+    return [...ids, ...extra.map((e) => e.id)];
+  }
+
+  // Load venues (with city) for the given ids, preserving the id order.
+  private async fetchVenuesInOrder(ids: string[]): Promise<Venue[]> {
+    if (ids.length === 0) return [];
+    const venues = await this.venues.find({
+      where: { id: In(ids), isPublished: true },
+      relations: { city: true },
+    });
+    const order = new Map(ids.map((id, i) => [id, i]));
+    return venues.sort(
+      (a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0),
+    );
   }
 
   private async cached<T>(key: string, loader: () => Promise<T>): Promise<T> {

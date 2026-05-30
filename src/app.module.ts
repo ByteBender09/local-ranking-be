@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { resolve } from 'path';
@@ -44,6 +45,7 @@ import { PartnersModule } from './modules/partners/partners.module';
       cache: true,
     }),
     CacheModule.register({ isGlobal: true, ttl: 60 * 1000, max: 5_000 }),
+    ScheduleModule.forRoot(),
     ServeStaticModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (cfg: ConfigService) => {

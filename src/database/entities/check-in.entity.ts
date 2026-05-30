@@ -6,15 +6,18 @@ import {
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
-  Unique,
   UpdateDateColumn,
 } from 'typeorm';
 import { Venue } from './venue.entity';
 import { User } from './user.entity';
 
+// A venue can be checked in many times (one per Vietnam calendar day, enforced
+// in the service). Each check-in carries 0 or 1 memory (comment + photos) inline.
+// `memoryCreatedAt` stamps when the memory was first written and drives the
+// 30-minute edit/delete lock.
 @Entity({ name: 'check_ins' })
-@Unique('uq_checkin_user_venue', ['userId', 'venueId'])
 @Index('idx_checkins_user_created', ['userId', 'createdAt'])
+@Index('idx_checkins_user_venue_created', ['userId', 'venueId', 'createdAt'])
 export class CheckIn {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -44,6 +47,11 @@ export class CheckIn {
 
   @Column({ type: 'boolean', name: 'is_public', default: true })
   isPublic: boolean;
+
+  // Null until the user first writes a memory on this check-in. Once set, the
+  // memory is editable/deletable only within 30 minutes of this timestamp.
+  @Column({ type: 'timestamptz', name: 'memory_created_at', nullable: true })
+  memoryCreatedAt: Date | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

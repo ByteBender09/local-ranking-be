@@ -25,6 +25,13 @@ export class SavedVenuesController {
     return this.service.list(user.id);
   }
 
+  // Tells the client when the saved list will be wiped, so it can show a
+  // friendly "your shortlist resets at end of month" reminder + countdown.
+  @Get('reset-info')
+  resetInfo(): { resetsAt: string } {
+    return { resetsAt: this.service.nextResetAt().toISOString() };
+  }
+
   @Post(':slug')
   add(
     @Param('slug') slug: string,

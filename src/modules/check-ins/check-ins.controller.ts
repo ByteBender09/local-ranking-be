@@ -37,21 +37,43 @@ export class CheckInsController {
     return this.service.create(slug, user.id, body);
   }
 
+  // Slug-based convenience routes act on the user's latest check-in at a venue
+  // (one-memory-per-venue clients like the web). Subject to the 30-minute lock.
   @Patch('venues/slug/:slug/check-in/memory')
-  updateMemory(
+  updateLatestMemory(
     @Param('slug') slug: string,
     @Body() body: UpdateMemoryDto,
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<CheckIn> {
-    return this.service.updateMemory(slug, user.id, body);
+    return this.service.updateLatestMemory(slug, user.id, body);
   }
 
   @Delete('venues/slug/:slug/check-in')
   @HttpCode(204)
-  async remove(
+  async removeLatest(
     @Param('slug') slug: string,
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<void> {
-    await this.service.remove(slug, user.id);
+    await this.service.removeLatest(slug, user.id);
+  }
+
+  // Memory edit/delete target a specific check-in by id, since a venue can now
+  // be checked in multiple times.
+  @Patch('me/check-ins/:id/memory')
+  updateMemory(
+    @Param('id') id: string,
+    @Body() body: UpdateMemoryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<CheckIn> {
+    return this.service.updateMemory(id, user.id, body);
+  }
+
+  @Delete('me/check-ins/:id')
+  @HttpCode(204)
+  async remove(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<void> {
+    await this.service.remove(id, user.id);
   }
 }

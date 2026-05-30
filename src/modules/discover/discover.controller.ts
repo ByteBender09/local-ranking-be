@@ -27,6 +27,16 @@ export class DiscoverController {
     return this.discover.trending(this.clamp(limit));
   }
 
+  // Canonical name for the monthly favorite-delta ranking.
+  @Public()
+  @Get('community-favorites')
+  communityFavorites(
+    @Query('limit', new DefaultValuePipe(8), ParseIntPipe) limit: number,
+  ): Promise<Venue[]> {
+    return this.discover.communityFavorites(this.clamp(limit));
+  }
+
+  // Backward-compatible alias → community favorites.
   @Public()
   @Get('recently-liked')
   recentlyLiked(
