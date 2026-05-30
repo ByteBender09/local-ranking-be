@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Venue } from '../../database/entities';
 import { ListVenuesDto, VenueSort } from './dto/list-venues.dto';
 
@@ -45,6 +45,18 @@ export class VenuesRepository {
       .take(filter.limit);
 
     return qb.getManyAndCount();
+  }
+
+  // Resolve a set of venues by id (preserves nothing about order — the caller
+  // re-orders). Includes the city relation so chips can show district/category.
+  // NOT filtered by is_published: a tour may legitimately reference a venue
+  // that's currently unpublished, and the editor still needs to show its chip.
+  findByIds(ids: string[]): Promise<Venue[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.repo.find({
+      where: { id: In(ids) },
+      relations: { city: true },
+    });
   }
 
   findBySlug(slug: string): Promise<Venue | null> {

@@ -37,6 +37,19 @@ export class VenuesController {
     return this.venues.search(q, Math.min(Math.max(limit, 1), 30));
   }
 
+  // Batch-resolve venues by id (comma-separated). Used by the tour editor's
+  // VenuePicker to render chips for already-selected venues on first load.
+  // Declared before ':slug' so the static path wins the route match.
+  @Get('by-ids')
+  byIds(@Query('ids', new DefaultValuePipe('')) ids: string): Promise<Venue[]> {
+    const list = ids
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 100);
+    return this.venues.byIds(list);
+  }
+
   @Get(':slug')
   bySlug(@Param('slug') slug: string): Promise<Venue> {
     return this.venues.getBySlug(slug);

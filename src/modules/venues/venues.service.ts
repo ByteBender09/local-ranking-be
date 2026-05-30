@@ -13,6 +13,10 @@ export class VenuesService {
     return new PaginatedResponse(items, total, filter.page, filter.limit);
   }
 
+  byIds(ids: string[]): Promise<Venue[]> {
+    return this.repo.findByIds(ids);
+  }
+
   async getBySlug(slug: string): Promise<Venue> {
     const venue = await this.repo.findBySlug(slug);
     if (!venue) throw new NotFoundException(`Venue not found: ${slug}`);
