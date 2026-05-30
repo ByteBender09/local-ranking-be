@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsBoolean,
   IsIn,
@@ -58,11 +59,13 @@ export class CreateTourDto {
   @IsString({ each: true })
   highlights?: string[];
 
-  @IsOptional()
+  // A tour must visit at least one venue — this is what powers the "related
+  // tours" list on each venue's detail page.
   @IsArray()
+  @ArrayMinSize(1)
   @ArrayMaxSize(50)
   @IsUUID('all', { each: true })
-  venueIds?: string[];
+  venueIds: string[];
 }
 
 export class UpdateTourDto {
@@ -89,8 +92,11 @@ export class UpdateTourDto {
   @IsString({ each: true })
   highlights?: string[];
 
+  // Optional on a partial update, but if provided it must keep at least one
+  // venue — a tour can never be left with zero venues.
   @IsOptional()
   @IsArray()
+  @ArrayMinSize(1)
   @ArrayMaxSize(50)
   @IsUUID('all', { each: true })
   venueIds?: string[];

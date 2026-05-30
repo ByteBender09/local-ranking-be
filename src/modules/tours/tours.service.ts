@@ -7,7 +7,12 @@ import { Tour, Category } from '../../database/entities';
 export class ToursService {
   constructor(@InjectRepository(Tour) private readonly tours: Repository<Tour>) {}
 
-  list(citySlug?: string, category?: Category, limit = 20): Promise<Tour[]> {
+  list(
+    citySlug?: string,
+    category?: Category,
+    venueId?: string,
+    limit = 20,
+  ): Promise<Tour[]> {
     const qb = this.tours
       .createQueryBuilder('t')
       .innerJoin('t.city', 'c')
@@ -17,21 +22,11 @@ export class ToursService {
       .limit(limit);
     if (citySlug) qb.andWhere('c.slug = :citySlug', { citySlug });
     if (category) qb.andWhere('t.category = :category', { category });
+    // Tours explicitly attached to a venue (the business picked it when
+    // creating the tour). This is the real "related tours" relationship —
+    // NOT a category/city heuristic.
+    if (venueId) qb.andWhere(':venueId = ANY(t.venue_ids)', { venueId });
     return qb.getMany();
-  }
-
-  async forVenue(citySlug: string, category: Category, limit = 4): Promise<Tour[]> {
-    const exact = await this.list(citySlug, category, limit);
-    if (exact.length >= limit) return exact;
-    const others = await this.tours
-      .createQueryBuilder('t')
-      .innerJoin('t.city', 'c')
-      .where('c.slug = :citySlug', { citySlug })
-      .andWhere('t.category <> :category', { category })
-      .orderBy('t.rating', 'DESC')
-      .limit(limit - exact.length)
-      .getMany();
-    return [...exact, ...others];
   }
 
   async bySlug(slug: string): Promise<Tour> {

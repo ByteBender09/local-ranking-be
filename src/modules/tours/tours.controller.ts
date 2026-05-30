@@ -19,9 +19,15 @@ export class ToursController {
   list(
     @Query('citySlug') citySlug?: string,
     @Query('category') category?: Category,
+    @Query('venueId') venueId?: string,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit?: number,
   ): Promise<Tour[]> {
-    return this.tours.list(citySlug, category, Math.min(Math.max(limit ?? 20, 1), 50));
+    return this.tours.list(
+      citySlug,
+      category,
+      venueId,
+      Math.min(Math.max(limit ?? 20, 1), 50),
+    );
   }
 
   @Get(':slug')
