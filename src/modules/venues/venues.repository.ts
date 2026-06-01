@@ -59,6 +59,29 @@ export class VenuesRepository {
     });
   }
 
+  // Total published-venue count per category for a city (or globally), so the
+  // category chips show real totals instead of only what's been rendered.
+  async categoryCounts(citySlug?: string): Promise<Record<string, number>> {
+    const qb = this.repo
+      .createQueryBuilder('venue')
+      .select('venue.category', 'category')
+      .addSelect('COUNT(*)', 'count')
+      .innerJoin('venue.city', 'city')
+      .where('venue.is_published = true')
+      .groupBy('venue.category');
+    if (citySlug) qb.andWhere('city.slug = :citySlug', { citySlug });
+    const rows = await qb.getRawMany<{ category: string; count: string }>();
+    const out: Record<string, number> = {};
+    let total = 0;
+    for (const r of rows) {
+      const n = parseInt(r.count, 10);
+      out[r.category] = n;
+      total += n;
+    }
+    out.all = total;
+    return out;
+  }
+
   findBySlug(slug: string): Promise<Venue | null> {
     // Public detail view also hides unpublished venues from anonymous users.
     return this.repo

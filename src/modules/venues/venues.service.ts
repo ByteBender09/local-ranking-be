@@ -17,6 +17,10 @@ export class VenuesService {
     return this.repo.findByIds(ids);
   }
 
+  categoryCounts(citySlug?: string): Promise<Record<string, number>> {
+    return this.repo.categoryCounts(citySlug);
+  }
+
   async getBySlug(slug: string): Promise<Venue> {
     const venue = await this.repo.findBySlug(slug);
     if (!venue) throw new NotFoundException(`Venue not found: ${slug}`);

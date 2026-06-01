@@ -50,6 +50,15 @@ export class VenuesController {
     return this.venues.byIds(list);
   }
 
+  // Total venue count per category for the category chips (real totals, not
+  // just what's been rendered). Declared before ':slug'.
+  @Get('category-counts')
+  categoryCounts(
+    @Query('citySlug') citySlug?: string,
+  ): Promise<Record<string, number>> {
+    return this.venues.categoryCounts(citySlug);
+  }
+
   @Get(':slug')
   bySlug(@Param('slug') slug: string): Promise<Venue> {
     return this.venues.getBySlug(slug);

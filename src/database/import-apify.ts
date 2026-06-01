@@ -38,7 +38,7 @@ function arg(name: string, fallback: string): string {
 const FLAGS = {
   totalVenues: parseInt(arg('venues', '1500'), 10),
   photos: parseInt(arg('photos', '5'), 10),
-  reviews: parseInt(arg('reviews', '10'), 10),
+  reviews: parseInt(arg('reviews', '5'), 10),
   minRating: parseFloat(arg('min-rating', '4.0')),
   onlyCity: arg('city', ''),
   limit: parseInt(arg('limit', '0'), 10),
@@ -76,7 +76,10 @@ const CATEGORY_TERMS: { category: Category; term: string }[] = [
 
 interface ApifyPlace {
   title?: string;
+  description?: string;
   categoryName?: string;
+  categories?: string[];
+  reviewsTags?: { title?: string; count?: number }[];
   searchString?: string;
   address?: string;
   neighborhood?: string;
@@ -93,7 +96,47 @@ interface ApifyPlace {
   openingHours?: { day: string; hours: string }[];
   [k: string]: unknown;
 }
-type Progress = Record<string, 'saved' | 'skipped' | 'failed'>;
+// placeId → status, plus `city:<slug>` → 'done' markers (city-level resume).
+type Progress = Record<string, string>;
+
+// Heavy fields we never use — stripped from external_raw to keep rows small.
+const RAW_DROP = new Set([
+  'webResults', 'popularTimesHistogram', 'popularTimesLiveText',
+  'popularTimesLivePercent', 'reviewsDistribution', 'questionsAndAnswers',
+  'peopleAlsoSearch', 'hotelAds', 'ownerUpdates', 'updatesFromCustomers',
+  'gasPrices', 'restaurantData', 'imageCategories', 'adrFormatAddress',
+  'googleMapsLinks', 'tableReservationLinks', 'bookingLinks', 'leadsEnrichment',
+]);
+function trimRaw(p: ApifyPlace): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(p)) if (!RAW_DROP.has(k)) out[k] = v;
+  return out;
+}
+
+// Up to 6 venue tags from Google categories + review keywords.
+function buildTags(p: ApifyPlace): string[] {
+  const raw: string[] = [];
+  for (const c of p.categories ?? []) if (typeof c === 'string') raw.push(c);
+  for (const t of p.reviewsTags ?? []) if (t?.title) raw.push(t.title);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const r of raw) {
+    const key = r.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(r.trim().slice(0, 40));
+    if (out.length >= 6) break;
+  }
+  return out;
+}
+
+// Deterministic small initial upvotes so imported venues aren't all flat at 0
+// (gives trending/sorting some life until real votes arrive).
+function seedUpvotes(slug: string): number {
+  let h = 0;
+  for (let i = 0; i < slug.length; i++) h = (h * 31 + slug.charCodeAt(i)) >>> 0;
+  return h % 50;
+}
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const slugify = (s: string): string =>
@@ -138,6 +181,9 @@ function compactHours(oh?: { day: string; hours: string }[]): string {
 }
 
 function buildDescription(p: ApifyPlace, category: Category, cityName: string): string {
+  // Prefer Google's own place description when present; else a clean template.
+  const own = (typeof p.description === 'string' ? p.description : '').trim();
+  if (own) return own.slice(0, 1000);
   const district = p.neighborhood || p.street || cityName;
   const labels: Record<Category, string> = {
     cafe: 'Quán cà phê', restaurant: 'Nhà hàng', street_food: 'Quán ăn',
@@ -155,10 +201,11 @@ async function withRetry<T>(fn: () => Promise<T>, label: string, tries = 6): Pro
     try { return await fn(); } catch (e) {
       last = e;
       const s = axios.isAxiosError(e) ? e.response?.status : undefined;
-      if (s && s < 500 && s !== 429) break;
-      // 429 → wait a FULL window (the throttler counts rejected hits, so don't
-      // hammer); otherwise short backoff.
-      await sleep(s === 429 ? 20000 : 1000 * (i + 1));
+      // Retry on 5xx, 429 (rate limit) and 403 — Apify's FREE plan transiently
+      // rejects run-starts with 403 under load; it clears after a short wait.
+      // Other 4xx are permanent → give up.
+      if (s && s < 500 && s !== 429 && s !== 403) break;
+      await sleep(s === 429 || s === 403 ? 20000 : 1000 * (i + 1));
     }
   }
   throw new Error(`${label} failed: ${String(last)}`);
@@ -197,6 +244,10 @@ async function scrapeCity(cityName: string, maxPerSearch: number): Promise<Apify
         maxReviews: FLAGS.reviews,
         skipClosedPlaces: true,
         scrapeReviewsPersonalData: false,
+        // Server-side rating filter so Apify only scrapes (and only bills for)
+        // places ≥ 4.0★. The client still enforces strict > 4.0 below to drop
+        // exactly-4.0. 'four' also excludes places with no reviews.
+        placeMinimumStars: 'four',
       },
       { headers: { 'Content-Type': 'application/json' }, timeout: 30000 }),
     'start run',
@@ -212,31 +263,42 @@ async function scrapeCity(cityName: string, maxPerSearch: number): Promise<Apify
       'poll run',
     );
     const status = st.data.data.status as string;
-    if (['SUCCEEDED', 'FAILED', 'ABORTED', 'TIMED-OUT'].includes(status)) {
-      console.log(`    run ${status}`);
-      break;
+    if (status === 'SUCCEEDED') { console.log('    run SUCCEEDED'); break; }
+    if (['FAILED', 'ABORTED', 'TIMED-OUT'].includes(status)) {
+      // Don't return partial data on a bad run — throw so the caller skips the
+      // city WITHOUT marking it done, and it gets retried on the next run.
+      throw new Error(`run ${status}`);
     }
   }
   return fetchItems(datasetId);
 }
 
 async function uploadImage(url: string): Promise<string> {
+  // 1) Fetch the Google image ONCE and convert to WebP. This buffer is kept and
+  //    reused for the upload + EVERY upload retry — we never re-fetch from
+  //    Google (a successful fetch is never wasted; no mid-retry 403 risk).
   const img = await withRetry(
     () => axios.get<ArrayBuffer>(url, { responseType: 'arraybuffer', timeout: 30000 }),
-    'download image',
+    'download image', 3,
   );
   const webp = await sharp(Buffer.from(img.data))
     .resize({ width: 1200, withoutEnlargement: true })
     .webp({ quality: 80 })
     .toBuffer();
-  const fd = new FormData();
-  fd.append('file', new Blob([new Uint8Array(webp)], { type: 'image/webp' }), 'g.webp');
+
+  // 2) Upload the saved buffer. Only the multipart wrapper is rebuilt per
+  //    attempt (a body stream is single-use); the image bytes are reused.
+  //    Retry hard on 429 so throttling only slows us — it never loses an image.
   const up = await withRetry(
-    () => axios.post<{ data?: { url?: string }; url?: string }>(`${BACKEND}/admin/uploads`, fd, {
-      headers: { Authorization: `Bearer ${ADMIN_JWT}` },
-      maxBodyLength: Infinity, timeout: 30000,
-    }),
-    'upload',
+    () => {
+      const fd = new FormData();
+      fd.append('file', new Blob([new Uint8Array(webp)], { type: 'image/webp' }), 'g.webp');
+      return axios.post<{ data?: { url?: string }; url?: string }>(
+        `${BACKEND}/admin/uploads`, fd,
+        { headers: { Authorization: `Bearer ${ADMIN_JWT}` }, maxBodyLength: Infinity, timeout: 30000 },
+      );
+    },
+    'upload', 8,
   );
   // The API wraps responses as { success, data: { url, ... } }.
   const out = up.data?.data?.url ?? up.data?.url;
@@ -270,6 +332,12 @@ async function main(): Promise<void> {
 
   for (const city of cities) {
     if (limitReached()) break;
+    // City-level resume: skip cities already fully scraped+processed so a
+    // restart never re-scrapes (and re-bills) a completed city.
+    if (progress[`city:${city.slug}`] === 'done') {
+      console.log(`\n${city.slug}: already done — skip`);
+      continue;
+    }
     const weight = CITY_WEIGHTS[city.slug] ?? Math.round(weightTotal / cities.length);
     const cityQuota = Math.max(1, Math.round(weight * scale));
     const perCategory = FLAGS.limit > 0
@@ -294,6 +362,9 @@ async function main(): Promise<void> {
       if ((p.totalScore ?? 0) <= FLAGS.minRating) continue;
       if (p.permanentlyClosed || p.temporarilyClosed) continue;
       if (!p.imageUrls || p.imageUrls.length === 0) continue;
+      // Skip places without real coordinates (would pin at 0,0 on the map).
+      if (typeof p.location?.lat !== 'number' || typeof p.location?.lng !== 'number'
+          || (p.location.lat === 0 && p.location.lng === 0)) continue;
       const name = (p.title ?? '').trim();
       if (!name) continue;
 
@@ -312,8 +383,12 @@ async function main(): Promise<void> {
         });
         if (exists) { progress[placeId] = 'skipped'; saveProgress(progress); skipped++; continue; }
 
+        // Try more candidate URLs than needed and stop once we have `photos`
+        // successful uploads — so a few 403/timeout failures don't shrink the
+        // gallery.
         const images: string[] = [];
-        for (const url of p.imageUrls.slice(0, FLAGS.photos)) {
+        for (const url of p.imageUrls.slice(0, FLAGS.photos * 3)) {
+          if (images.length >= FLAGS.photos) break;
           try { images.push(await uploadImage(url)); }
           catch (e) { console.warn(`    img failed: ${String(e)}`); }
           await sleep(FLAGS.uploadDelay); // throttle-friendly spacing
@@ -338,11 +413,11 @@ async function main(): Promise<void> {
           externalId: placeId,
           externalOpeningHours: (p.openingHours ?? null) as unknown as string[] | null,
           externalSyncedAt: new Date(),
-          externalRaw: p as Record<string, unknown>,
+          externalRaw: trimRaw(p),
           source: 'google',
-          upvotes: 0,
+          upvotes: seedUpvotes(slug),
           priceRange: priceTier(p.price),
-          tags: [],
+          tags: buildTags(p),
           hours: compactHours(p.openingHours),
           lat: p.location?.lat ?? 0,
           lng: p.location?.lng ?? 0,
@@ -355,6 +430,13 @@ async function main(): Promise<void> {
         progress[placeId] = 'failed'; saveProgress(progress); failed++;
         console.warn(`  FAILED ${name}: ${String(e)}`);
       }
+    }
+    // City fully processed — mark done so a restart skips its scrape entirely.
+    // Only in a full run (not --limit test / not --dry-run).
+    if (FLAGS.limit === 0 && !FLAGS.dryRun) {
+      progress[`city:${city.slug}`] = 'done';
+      saveProgress(progress);
+      console.log(`  ✓ ${city.slug} done`);
     }
   }
 
