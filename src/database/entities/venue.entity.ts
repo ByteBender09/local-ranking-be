@@ -29,10 +29,13 @@ export type Category =
   | 'park'
   | 'shopping';
 
+export type VenueSource = 'curated' | 'google';
+
 @Entity({ name: 'venues' })
 @Index('idx_venues_city_category', ['cityId', 'category'])
 @Index('idx_venues_upvotes', ['upvotes'])
 @Index('idx_venues_rating', ['rating'])
+@Index('idx_venues_source', ['source'])
 export class Venue {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -100,6 +103,47 @@ export class Venue {
   @Index()
   @Column({ type: 'boolean', name: 'is_published', default: true })
   isPublished: boolean;
+
+  // ── Provenance & externally-sourced data (source-neutral) ─────────────────
+  // 'curated' = hand-seeded; 'foursquare' = imported via the Places importer.
+  @Column({ type: 'varchar', length: 16, default: 'curated' })
+  source: VenueSource;
+
+  // External provider place id (e.g. Foursquare fsq_place_id) — lets the
+  // importer dedupe + re-sync. Partial-unique (NULL for curated rows).
+  @Column({ type: 'varchar', length: 300, name: 'external_id', nullable: true })
+  externalId: string | null;
+
+  // Original provider rating/review count, normalised to a 0–5 scale. NEVER
+  // overwritten by ReviewsService — `rating`/`reviewCount` above hold the
+  // blended (external + in-app) display value; these preserve the pristine
+  // source for the blend + re-sync.
+  @Column({
+    type: 'numeric',
+    precision: 3,
+    scale: 2,
+    name: 'external_rating',
+    default: 0,
+    transformer: numericToNumber,
+  })
+  externalRating: number;
+
+  @Column({ type: 'int', name: 'external_review_count', default: 0 })
+  externalReviewCount: number;
+
+  // Full weekly opening hours from the provider. The compact `hours` column
+  // above stays the short string the current UI shows.
+  @Column({ type: 'jsonb', name: 'external_opening_hours', nullable: true })
+  externalOpeningHours: string[] | null;
+
+  @Column({ type: 'timestamptz', name: 'external_synced_at', nullable: true })
+  externalSyncedAt: Date | null;
+
+  // Full raw payload from the source (e.g. the entire Apify/Google Maps item:
+  // reviews, phone, website, price, popular times…). Stored so we never have to
+  // re-scrape — FE/app may not use it now, but it's there for later features.
+  @Column({ type: 'jsonb', name: 'external_raw', nullable: true })
+  externalRaw: Record<string, unknown> | null;
 
   @OneToMany(() => Review, (r) => r.venue)
   reviews: Review[];

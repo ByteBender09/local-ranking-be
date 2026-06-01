@@ -29,6 +29,9 @@
     "seed:venues": "ts-node -r tsconfig-paths/register src/database/seed-venues.ts",
     "seed:tours": "ts-node -r tsconfig-paths/register src/database/seed-tours.ts",
     "reset:venues": "ts-node -r tsconfig-paths/register src/database/reset-venues.ts",
+    "reset:for-import": "ts-node -r tsconfig-paths/register src/database/reset-for-import.ts",
+    "import:apify": "ts-node -r tsconfig-paths/register src/database/import-apify.ts",
+    "diag:apify": "ts-node -r tsconfig-paths/register src/database/_diag-apify.ts",
     "predeploy": "npm run build && npm run migration:run",
     "start:prod:full": "npm run migration:run && node dist/main"
   },
@@ -63,6 +66,7 @@
     "reflect-metadata": "^0.2.2",
     "resend": "^6.12.3",
     "rxjs": "^7.8.1",
+    "sharp": "^0.33.5",
     "typeorm": "^0.3.20"
   },
   "devDependencies": {

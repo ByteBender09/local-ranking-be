@@ -8,6 +8,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { SkipThrottle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Request } from 'express';
 import { existsSync, mkdirSync } from 'fs';
@@ -34,6 +35,9 @@ const ALLOWED = new Set([
   'image/avif',
 ]);
 
+// Admin-only, auth-gated bulk uploads (e.g. the venue importer) must not be
+// rate-limited like public traffic — exempt this controller from the throttler.
+@SkipThrottle()
 @Controller('admin/uploads')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('admin')

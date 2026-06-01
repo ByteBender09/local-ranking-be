@@ -54,10 +54,11 @@ export class ReviewsService {
         .where('r.venue_id = :id', { id: venue.id })
         .getRawOne<{ avg: string; count: string }>() ?? { avg: '0', count: '0' };
 
-      await manager.update(Venue, { id: venue.id }, {
-        rating: Math.round(parseFloat(avg) * 100) / 100,
-        reviewCount: parseInt(count, 10),
-      });
+      await manager.update(
+        Venue,
+        { id: venue.id },
+        blendRating(venue, parseFloat(avg) || 0, parseInt(count, 10) || 0),
+      );
 
       return review;
     });
@@ -81,10 +82,36 @@ export class ReviewsService {
         .where('r.venue_id = :id', { id: venue.id })
         .getRawOne<{ avg: string; count: string }>() ?? { avg: '0', count: '0' };
 
-      await manager.update(Venue, { id: venue.id }, {
-        rating: Math.round(parseFloat(avg) * 100) / 100,
-        reviewCount: parseInt(count, 10),
-      });
+      await manager.update(
+        Venue,
+        { id: venue.id },
+        blendRating(venue, parseFloat(avg) || 0, parseInt(count, 10) || 0),
+      );
     });
   }
+}
+
+/**
+ * Combine a venue's pristine external rating/count (e.g. Foursquare) with its
+ * in-app review aggregate into the displayed `rating`/`reviewCount`. For curated
+ * venues (externalReviewCount = 0) this reduces to the in-app-only values, so
+ * behaviour is unchanged. The external base is read from the venue row and never
+ * written back here, so it can never be wiped by review churn.
+ */
+function blendRating(
+  venue: Venue,
+  localAvg: number,
+  localCount: number,
+): { rating: number; reviewCount: number } {
+  const extCount = venue.externalReviewCount ?? 0;
+  const extRating = venue.externalRating ?? 0;
+  const combinedCount = localCount + extCount;
+  const combinedRating =
+    combinedCount > 0
+      ? (localAvg * localCount + extRating * extCount) / combinedCount
+      : 0;
+  return {
+    rating: Math.round(combinedRating * 100) / 100,
+    reviewCount: combinedCount,
+  };
 }
