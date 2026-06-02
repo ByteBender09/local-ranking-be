@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
+  Brand,
   CheckIn,
   City,
   Review,
@@ -19,7 +20,7 @@ import { CitiesModule } from '../cities/cities.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Venue, City, Tour, Review, Vote, CheckIn]),
+    TypeOrmModule.forFeature([User, Venue, City, Tour, Review, Vote, CheckIn, Brand]),
     CitiesModule,
   ],
   controllers: [

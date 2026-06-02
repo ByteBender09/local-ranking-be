@@ -23,8 +23,9 @@ export class DiscoverController {
   @Get('trending')
   trending(
     @Query('limit', new DefaultValuePipe(8), ParseIntPipe) limit: number,
+    @Query('citySlug') citySlug?: string,
   ): Promise<Venue[]> {
-    return this.discover.trending(this.clamp(limit));
+    return this.discover.trending(this.clamp(limit), this.city(citySlug));
   }
 
   // Canonical name for the monthly favorite-delta ranking.
@@ -32,8 +33,9 @@ export class DiscoverController {
   @Get('community-favorites')
   communityFavorites(
     @Query('limit', new DefaultValuePipe(8), ParseIntPipe) limit: number,
+    @Query('citySlug') citySlug?: string,
   ): Promise<Venue[]> {
-    return this.discover.communityFavorites(this.clamp(limit));
+    return this.discover.communityFavorites(this.clamp(limit), this.city(citySlug));
   }
 
   // Backward-compatible alias → community favorites.
@@ -41,24 +43,27 @@ export class DiscoverController {
   @Get('recently-liked')
   recentlyLiked(
     @Query('limit', new DefaultValuePipe(8), ParseIntPipe) limit: number,
+    @Query('citySlug') citySlug?: string,
   ): Promise<Venue[]> {
-    return this.discover.recentlyLiked(this.clamp(limit));
+    return this.discover.recentlyLiked(this.clamp(limit), this.city(citySlug));
   }
 
   @Public()
   @Get('editors-pick')
   editorsPick(
     @Query('limit', new DefaultValuePipe(8), ParseIntPipe) limit: number,
+    @Query('citySlug') citySlug?: string,
   ): Promise<Venue[]> {
-    return this.discover.editorsPick(this.clamp(limit));
+    return this.discover.editorsPick(this.clamp(limit), this.city(citySlug));
   }
 
   @Public()
   @Get('hidden-gems')
   hiddenGems(
     @Query('limit', new DefaultValuePipe(8), ParseIntPipe) limit: number,
+    @Query('citySlug') citySlug?: string,
   ): Promise<Venue[]> {
-    return this.discover.hiddenGems(this.clamp(limit));
+    return this.discover.hiddenGems(this.clamp(limit), this.city(citySlug));
   }
 
   @UseGuards(JwtAuthGuard)
@@ -72,5 +77,13 @@ export class DiscoverController {
 
   private clamp(n: number): number {
     return Math.min(Math.max(n, 1), 30);
+  }
+
+  // Normalise the optional city filter: trim, lowercase, and treat empty as
+  // "no filter" (→ overall feed). Keeps the contract simple for clients that
+  // pass citySlug='' when the user hasn't granted location.
+  private city(slug?: string): string | undefined {
+    const s = slug?.trim().toLowerCase();
+    return s ? s : undefined;
   }
 }

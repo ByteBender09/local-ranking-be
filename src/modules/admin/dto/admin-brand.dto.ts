@@ -37,11 +37,20 @@ export class ListAdminBrandsDto extends PaginationDto {
   limit: number = 20;
 }
 
+export class CreateAdminBrandDto {
+  @IsString() @MinLength(2) @MaxLength(120) name: string;
+  @IsString() @MinLength(2) @MaxLength(16) shortName: string;
+  @IsOptional() @IsString() @MaxLength(500) logoUrl?: string;
+  @IsOptional() @IsString() @MaxLength(2000) description?: string;
+  @IsOptional() @IsUrl({ require_tld: false }) @MaxLength(500) websiteUrl?: string;
+  @IsOptional() @IsEmail() @MaxLength(200) contactEmail?: string;
+}
+
 export class UpdateAdminBrandDto {
-  @IsOptional() @IsString() @MinLength(2) @MaxLength(120) brandName?: string;
-  @IsOptional() @IsString() @MinLength(2) @MaxLength(16) brandShortName?: string;
-  @IsOptional() @IsString() @MaxLength(500) brandLogoUrl?: string;
-  @IsOptional() @IsString() @MaxLength(2000) brandDescription?: string;
-  @IsOptional() @IsUrl({ require_tld: false }) @MaxLength(500) brandWebsiteUrl?: string;
-  @IsOptional() @IsEmail() @MaxLength(200) brandContactEmail?: string;
+  @IsOptional() @IsString() @MinLength(2) @MaxLength(120) name?: string;
+  @IsOptional() @IsString() @MinLength(2) @MaxLength(16) shortName?: string;
+  @IsOptional() @IsString() @MaxLength(500) logoUrl?: string;
+  @IsOptional() @IsString() @MaxLength(2000) description?: string;
+  @IsOptional() @IsUrl({ require_tld: false }) @MaxLength(500) websiteUrl?: string;
+  @IsOptional() @IsEmail() @MaxLength(200) contactEmail?: string;
 }

@@ -26,15 +26,21 @@ import {
 } from './dto/tour-management.dto';
 import { TourManagementService } from './tour-management.service';
 
+// Tour creation/editing is ADMIN-ONLY. Businesses no longer self-manage tours
+// or branding from the public site — an admin creates the brand and the tours
+// on their behalf (assigning ownerId). See AdminToursController for the admin
+// listing/publish/delete surface; this controller holds the write operations.
 @Controller()
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('business', 'admin')
+@Roles('admin')
 export class TourManagementController {
   constructor(private readonly service: TourManagementService) {}
 
+  // Admin tour listing (with itinerary + brand). Kept at this path for the
+  // existing client; returns ALL tours since management is admin-only now.
   @Get('me/tours')
-  listMine(@CurrentUser() user: AuthenticatedUser): Promise<Tour[]> {
-    return this.service.listMine(user.id);
+  listAll(): Promise<Tour[]> {
+    return this.service.listAll();
   }
 
   @Post('tours')

@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Venue } from '../../database/entities';
 import { ListVenuesDto, VenueSort } from './dto/list-venues.dto';
+import { bayesianScoreExpr } from './ranking';
 
 @Injectable()
 export class VenuesRepository {
@@ -16,7 +17,10 @@ export class VenuesRepository {
   } {
     switch (sort) {
       case 'rating':
-        return { field: 'venue.rating', direction: 'DESC' };
+        // "Best rated" = Bayesian weighted rating, NOT raw average, so a 4.9★
+        // venue with a handful of reviews can't leapfrog a heavily-reviewed
+        // 4.6★ one. See ./ranking.ts.
+        return { field: bayesianScoreExpr('venue'), direction: 'DESC' };
       case 'newest':
         return { field: 'venue.createdAt', direction: 'DESC' };
       case 'upvotes':

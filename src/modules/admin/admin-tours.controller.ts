@@ -40,7 +40,7 @@ export class AdminToursController {
     const qb = this.tours
       .createQueryBuilder('t')
       .leftJoinAndSelect('t.city', 'city')
-      .leftJoinAndSelect('t.owner', 'owner');
+      .leftJoinAndSelect('t.brand', 'brand');
 
     if (filter.citySlug)
       qb.andWhere('city.slug = :slug', { slug: filter.citySlug });

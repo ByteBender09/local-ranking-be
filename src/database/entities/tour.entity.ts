@@ -5,13 +5,21 @@ import {
   Index,
   JoinColumn,
   ManyToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { bigintToNumber, numericToNumber } from '../transformers';
+import { Brand } from './brand.entity';
 import { City } from './city.entity';
 import type { Category } from './venue.entity';
+import { TourStop } from './tour-stop.entity';
 import { User } from './user.entity';
+
+// Geographic span of a tour, derived from the distinct cities in its stops:
+//   intra_city      — all stops in a single city (nội thành)
+//   inter_province  — stops span 2+ cities (liên tỉnh)
+export type TourScope = 'intra_city' | 'inter_province';
 
 export interface TourProviderInfo {
   name: string;
@@ -48,12 +56,26 @@ export class Tour {
   @Column({ type: 'varchar', length: 200 })
   title: string;
 
+  // Primary city = the first stop's city. DERIVED from `stops` on every save
+  // (see TourManagementService). Kept as a real column so existing list/filter
+  // queries (`city.slug = :citySlug`) and clients reading `tour.cityId` keep
+  // working without a join through tour_stops.
   @Column({ type: 'uuid', name: 'city_id' })
   cityId: string;
 
   @ManyToOne(() => City, (c) => c.tours, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'city_id' })
   city: City;
+
+  // Ordered itinerary. The source of truth for cities/venues a tour visits;
+  // `cityId`, `venueIds` and `scope` are all derived from this on save.
+  @OneToMany(() => TourStop, (s) => s.tour, { cascade: true })
+  stops: TourStop[];
+
+  // intra_city vs inter_province — derived from the distinct cities in `stops`.
+  @Index('idx_tours_scope')
+  @Column({ type: 'varchar', length: 16, default: 'intra_city' })
+  scope: TourScope;
 
   @Column({ type: 'varchar', length: 24 })
   category: Category;
@@ -101,7 +123,10 @@ export class Tour {
   @Column({ type: 'varchar', length: 500, name: 'booking_url', nullable: true })
   bookingUrl: string | null;
 
-  // Venues from the system catalog this tour visits
+  // Venues from the system catalog this tour visits. DERIVED from `stops`
+  // (the non-null venueIds, de-duplicated, in stop order) on every save. Kept
+  // as a column so the venue→tours "related tours" query (`:venueId = ANY(...)`)
+  // and clients reading `tour.venueIds` keep working.
   @Column({
     type: 'uuid',
     array: true,
@@ -114,7 +139,20 @@ export class Tour {
   @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
   promotions: TourPromotion[];
 
-  // null = system-managed catalog entry. Non-null = a business owns it.
+  // The brand (catalog object, NOT a user account) that provides this tour.
+  // null = system-managed entry (→ SITE_PROVIDER). `provider` below is the
+  // denormalised display copy of this brand, refreshed on every save.
+  @Index('idx_tours_brand')
+  @Column({ type: 'uuid', name: 'brand_id', nullable: true })
+  brandId: string | null;
+
+  @ManyToOne(() => Brand, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'brand_id' })
+  brand: Brand | null;
+
+  // DEPRECATED: legacy link to the User that created/owned a tour, from when a
+  // brand was a User. Kept nullable for back-compat with the branding module +
+  // older rows; new admin-created tours leave it null and use `brandId`.
   @Column({ type: 'uuid', name: 'owner_id', nullable: true })
   ownerId: string | null;
 

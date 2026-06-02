@@ -32,7 +32,9 @@ export class ToursService {
   async bySlug(slug: string): Promise<Tour> {
     const tour = await this.tours.findOne({
       where: { slug },
-      relations: { city: true },
+      relations: { city: true, stops: { city: true, venue: true } },
+      // Render the itinerary in visiting order.
+      order: { stops: { order: 'ASC' } },
     });
     if (!tour) throw new NotFoundException(`Tour not found: ${slug}`);
     return tour;
