@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import * as dotenv from 'dotenv';
 import { DataSource, Repository } from 'typeorm';
 import { dataSourceOptions } from './data-source';
-import { City, Tour, User } from './entities';
+import { Brand, City, Tour, TourStop } from './entities';
 import { TOUR_BRANDS, TOUR_SEEDS, type BrandSeed } from './seed-data/tour-brands';
 
 dotenv.config();
@@ -17,70 +17,51 @@ const slugify = (s: string): string =>
     .replace(/^-+|-+$/g, '')
     .slice(0, 160);
 
-async function upsertBrandUser(
-  repo: Repository<User>,
+// Brands are standalone catalog objects (not user accounts). Keyed by name.
+async function upsertBrand(
+  repo: Repository<Brand>,
   brand: BrandSeed,
-): Promise<User> {
-  let row = await repo.findOne({ where: { handle: brand.handle } });
+): Promise<Brand> {
+  let row = await repo.findOne({ where: { name: brand.brandName } });
   if (!row) {
     row = repo.create({
-      handle: brand.handle,
-      name: brand.name,
-      role: 'business',
-      email: brand.brandContactEmail,
-      avatar: brand.avatar,
-      bio: brand.brandDescription,
-      socials: {},
-      bookingEnabled: false,
-      checkInCount: 0,
-      followerCount: 0,
-      brandName: brand.brandName,
-      brandShortName: brand.brandShortName,
-      brandLogoUrl: brand.brandLogoUrl,
-      brandDescription: brand.brandDescription,
-      brandWebsiteUrl: brand.brandWebsiteUrl,
-      brandContactEmail: brand.brandContactEmail,
-      brandEmailVerified: brand.emailVerified,
-      brandEmailVerifiedAt: brand.emailVerified ? new Date() : null,
+      name: brand.brandName,
+      shortName: brand.brandShortName,
+      logoUrl: brand.brandLogoUrl,
+      description: brand.brandDescription,
+      websiteUrl: brand.brandWebsiteUrl,
+      contactEmail: brand.brandContactEmail,
+      verified: brand.emailVerified,
+      verifiedAt: brand.emailVerified ? new Date() : null,
     });
     return repo.save(row);
   }
 
-  // Re-running the seed shouldn't clobber admin tweaks to identity fields
-  // (name, email, avatar). Only branding info that came from the seed is
-  // re-applied so the latest URL / description shows up after a re-run.
+  // Re-apply seed branding info so re-runs pick up edits to tour-brands.ts.
   let dirty = false;
-  if (row.role !== 'business' && row.role !== 'admin') {
-    row.role = 'business';
+  if (row.shortName !== brand.brandShortName) {
+    row.shortName = brand.brandShortName;
     dirty = true;
   }
-  if (row.brandName !== brand.brandName) {
-    row.brandName = brand.brandName;
+  if (row.logoUrl !== brand.brandLogoUrl) {
+    row.logoUrl = brand.brandLogoUrl;
     dirty = true;
   }
-  if (row.brandShortName !== brand.brandShortName) {
-    row.brandShortName = brand.brandShortName;
+  if (row.description !== brand.brandDescription) {
+    row.description = brand.brandDescription;
     dirty = true;
   }
-  if (row.brandLogoUrl !== brand.brandLogoUrl) {
-    row.brandLogoUrl = brand.brandLogoUrl;
+  if (row.websiteUrl !== brand.brandWebsiteUrl) {
+    row.websiteUrl = brand.brandWebsiteUrl;
     dirty = true;
   }
-  if (row.brandDescription !== brand.brandDescription) {
-    row.brandDescription = brand.brandDescription;
+  if (row.contactEmail !== brand.brandContactEmail) {
+    row.contactEmail = brand.brandContactEmail;
     dirty = true;
   }
-  if (row.brandWebsiteUrl !== brand.brandWebsiteUrl) {
-    row.brandWebsiteUrl = brand.brandWebsiteUrl;
-    dirty = true;
-  }
-  if (row.brandContactEmail !== brand.brandContactEmail) {
-    row.brandContactEmail = brand.brandContactEmail;
-    dirty = true;
-  }
-  if (brand.emailVerified && !row.brandEmailVerified) {
-    row.brandEmailVerified = true;
-    row.brandEmailVerifiedAt = new Date();
+  if (brand.emailVerified && !row.verified) {
+    row.verified = true;
+    row.verifiedAt = new Date();
     dirty = true;
   }
   return dirty ? repo.save(row) : row;
@@ -107,20 +88,29 @@ async function main(): Promise<void> {
 
   const cityRepo = ds.getRepository(City);
   const tourRepo = ds.getRepository(Tour);
-  const userRepo = ds.getRepository(User);
+  const tourStopRepo = ds.getRepository(TourStop);
+  const brandRepo = ds.getRepository(Brand);
 
-  const brandUsers = new Map<string, User>();
+  const brandsByHandle = new Map<string, Brand>();
   for (const b of TOUR_BRANDS) {
-    const u = await upsertBrandUser(userRepo, b);
-    brandUsers.set(b.handle, u);
+    const brand = await upsertBrand(brandRepo, b);
+    brandsByHandle.set(b.handle, brand);
   }
-  console.log(`✓ Brands: ${brandUsers.size}`);
+  console.log(`✓ Brands: ${brandsByHandle.size}`);
+
+  // Build the denormalised provider blob from a brand.
+  const providerOf = (b: Brand) => ({
+    name: b.name,
+    shortName: b.shortName,
+    verified: b.verified,
+    logoUrl: b.logoUrl ?? null,
+  });
 
   let created = 0;
   let skipped = 0;
   for (const t of TOUR_SEEDS) {
-    const owner = brandUsers.get(t.brandHandle);
-    if (!owner) {
+    const brand = brandsByHandle.get(t.brandHandle);
+    if (!brand) {
       console.warn(`  ⚠ unknown brand handle "${t.brandHandle}", skip`);
       skipped += 1;
       continue;
@@ -133,7 +123,8 @@ async function main(): Promise<void> {
     }
 
     const existing = await tourRepo.findOne({
-      where: { ownerId: owner.id, title: t.title },
+      where: { brandId: brand.id, title: t.title },
+      relations: { stops: true },
     });
 
     if (existing) {
@@ -161,15 +152,8 @@ async function main(): Promise<void> {
         existing.bookingUrl = t.bookingUrl;
         dirty = true;
       }
-      // Re-sync the denormalised provider blob — older rows seeded before
-      // logoUrl was added still have an incomplete provider object.
-      const nextProvider = {
-        name: owner.brandName ?? owner.name,
-        shortName:
-          owner.brandShortName ?? owner.handle.slice(0, 6).toUpperCase(),
-        verified: owner.brandEmailVerified,
-        logoUrl: owner.brandLogoUrl ?? null,
-      };
+      // Re-sync the denormalised provider blob from the brand.
+      const nextProvider = providerOf(brand);
       const sameProvider =
         existing.provider &&
         existing.provider.name === nextProvider.name &&
@@ -178,6 +162,15 @@ async function main(): Promise<void> {
         (existing.provider.logoUrl ?? null) === nextProvider.logoUrl;
       if (!sameProvider) {
         existing.provider = nextProvider;
+        dirty = true;
+      }
+      // Ensure a single-city itinerary exists for legacy seed rows.
+      if (!existing.stops || existing.stops.length === 0) {
+        existing.stops = [
+          tourStopRepo.create({ order: 0, cityId: city.id, venueId: null }),
+        ];
+        existing.cityId = city.id;
+        existing.scope = 'intra_city';
         dirty = true;
       }
       if (dirty) await tourRepo.save(existing);
@@ -192,6 +185,9 @@ async function main(): Promise<void> {
       slug,
       title: t.title,
       cityId: city.id,
+      scope: 'intra_city',
+      // Seed tours are single-city, city-only itineraries (no specific venue).
+      stops: [tourStopRepo.create({ order: 0, cityId: city.id, venueId: null })],
       category: t.category,
       durationHours: t.durationHours,
       priceVnd: t.priceVnd,
@@ -204,14 +200,9 @@ async function main(): Promise<void> {
       promotions: [],
       rating: 0,
       reviewCount: 0,
-      ownerId: owner.id,
-      provider: {
-        name: owner.brandName ?? owner.name,
-        shortName:
-          owner.brandShortName ?? owner.handle.slice(0, 6).toUpperCase(),
-        verified: owner.brandEmailVerified,
-        logoUrl: owner.brandLogoUrl ?? null,
-      },
+      brandId: brand.id,
+      ownerId: null,
+      provider: providerOf(brand),
       isPublished: true,
     });
     await tourRepo.save(tour);
