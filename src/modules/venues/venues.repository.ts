@@ -86,6 +86,18 @@ export class VenuesRepository {
     return out;
   }
 
+  // Lightweight projection of every published venue for the sitemap: just the
+  // slug + last-updated timestamp, no heavy columns (externalRaw etc.). One
+  // query, ordered newest-first so the freshest URLs lead.
+  sitemapEntries(): Promise<Array<{ slug: string; updatedAt: Date }>> {
+    return this.repo
+      .createQueryBuilder('venue')
+      .select(['venue.slug AS slug', 'venue.updated_at AS "updatedAt"'])
+      .where('venue.is_published = true')
+      .orderBy('venue.updated_at', 'DESC')
+      .getRawMany<{ slug: string; updatedAt: Date }>();
+  }
+
   findBySlug(slug: string): Promise<Venue | null> {
     // Public detail view also hides unpublished venues from anonymous users.
     return this.repo

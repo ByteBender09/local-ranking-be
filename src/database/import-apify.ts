@@ -190,9 +190,10 @@ function buildDescription(p: ApifyPlace, category: Category, cityName: string): 
     viewpoint: 'Điểm tham quan', beach: 'Bãi biển', homestay: 'Homestay',
     bar: 'Quán bar', museum: 'Bảo tàng', park: 'Công viên', shopping: 'Địa điểm mua sắm',
   };
-  const r = p.totalScore ? `${p.totalScore.toFixed(1)}★` : '';
-  const n = p.reviewsCount ? ` (${p.reviewsCount} đánh giá)` : '';
-  return `${labels[category]} tại ${district}, ${cityName}. ${r}${n}`.trim();
+  // Rating + review count are shown by the UI from venue.rating/reviewCount —
+  // don't bake them into the description text (it duplicated the stars and went
+  // stale as reviews changed). Keep the description a clean sentence.
+  return `${labels[category]} tại ${district}, ${cityName}.`.trim();
 }
 
 async function withRetry<T>(fn: () => Promise<T>, label: string, tries = 6): Promise<T> {

@@ -59,6 +59,14 @@ export class VenuesController {
     return this.venues.categoryCounts(citySlug);
   }
 
+  // All published venue slugs + updatedAt for the sitemap. Lightweight (no
+  // heavy columns) so the FE can list every venue, not just the first page.
+  // Declared before ':slug' so the static path wins the route match.
+  @Get('sitemap')
+  sitemap(): Promise<Array<{ slug: string; updatedAt: Date }>> {
+    return this.venues.sitemapEntries();
+  }
+
   @Get(':slug')
   bySlug(@Param('slug') slug: string): Promise<Venue> {
     return this.venues.getBySlug(slug);

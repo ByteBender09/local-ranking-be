@@ -21,6 +21,10 @@ export class VenuesService {
     return this.repo.categoryCounts(citySlug);
   }
 
+  sitemapEntries(): Promise<Array<{ slug: string; updatedAt: Date }>> {
+    return this.repo.sitemapEntries();
+  }
+
   async getBySlug(slug: string): Promise<Venue> {
     const venue = await this.repo.findBySlug(slug);
     if (!venue) throw new NotFoundException(`Venue not found: ${slug}`);
