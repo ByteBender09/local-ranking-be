@@ -67,6 +67,13 @@ export class Venue {
   @Column({ type: 'text' })
   description: string;
 
+  // Official website (canonical home for the link the detail page shows + the
+  // admin editor edits). Backfilled from the scraped `external_raw.website`
+  // (apify) and `external_raw.contacts.website` (pisomap); a real column so it's
+  // editable, validatable and not buried in provenance JSON.
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  website: string | null;
+
   @Column({ type: 'text', array: true, default: () => "ARRAY[]::text[]" })
   images: string[];
 

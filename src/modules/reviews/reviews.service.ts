@@ -12,9 +12,28 @@ export class ReviewsService {
   ) {}
 
   listByVenue(venueId: string, limit = 30): Promise<Review[]> {
+    // Only expose safe public author fields — NEVER the full user row, which
+    // carries email / googleId / instagramAccessToken. `isSynthetic` lets the
+    // web render importer-sourced (Google) reviews with photo + name only.
     return this.reviews.find({
       where: { venueId },
       relations: { user: true },
+      select: {
+        id: true,
+        venueId: true,
+        userId: true,
+        rating: true,
+        body: true,
+        createdAt: true,
+        updatedAt: true,
+        user: {
+          id: true,
+          handle: true,
+          name: true,
+          avatar: true,
+          isSynthetic: true,
+        },
+      },
       order: { createdAt: 'DESC' },
       take: limit,
     });

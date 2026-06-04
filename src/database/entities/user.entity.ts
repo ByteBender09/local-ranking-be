@@ -39,6 +39,13 @@ export class User {
   @Column({ type: 'varchar', length: 16, default: 'user' })
   role: UserRole;
 
+  // Placeholder reviewer account created by the importer to attach scraped
+  // Google reviews (not a real login — no googleId/email). The web detail page
+  // renders reviews authored by these users in the "Google reviews" section
+  // with just the photo + name, never the @handle.
+  @Column({ type: 'boolean', name: 'is_synthetic', default: false })
+  isSynthetic: boolean;
+
   @Index({ unique: true, where: '"google_id" IS NOT NULL' })
   @Column({ type: 'varchar', length: 64, name: 'google_id', nullable: true })
   googleId: string | null;

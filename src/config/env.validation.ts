@@ -7,6 +7,11 @@ export const envValidationSchema = Joi.object({
   PORT: Joi.number().default(4000),
   CORS_ORIGINS: Joi.string().default('http://localhost:3000'),
   TRUST_PROXY: Joi.number().integer().min(0).default(0),
+  // Shared secret the Next.js frontend sends as `x-internal-token` on its
+  // server-side (SSR/ISR) requests. When set, the throttler exempts those calls
+  // so the FE server's single egress IP isn't rate-limited as one client. Leave
+  // empty to disable the exemption (all traffic throttled by IP).
+  INTERNAL_API_TOKEN: Joi.string().allow('').default(''),
 
   DATABASE_URL: Joi.string().uri({ scheme: ['postgres', 'postgresql'] }).required(),
   DB_SSL: Joi.boolean().default(false),

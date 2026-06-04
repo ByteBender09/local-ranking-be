@@ -18,6 +18,17 @@ import {
 import { UpdateCityDto } from './dto/update-city.dto';
 import { CitiesService } from '../cities/cities.service';
 
+// Normalise a user-entered website into a stored value: trim, drop when empty,
+// and prepend https:// when the scheme is missing so the FE always gets a
+// clickable absolute URL. Returns null to clear the column.
+function normalizeWebsite(input: string | undefined): string | null {
+  if (input === undefined) return null;
+  const v = input.trim();
+  if (!v) return null;
+  const withScheme = /^https?:\/\//i.test(v) ? v : `https://${v}`;
+  return withScheme.slice(0, 500);
+}
+
 const slugify = (s: string): string =>
   s
     .toLowerCase()
@@ -152,6 +163,7 @@ export class AdminCitiesVenuesService {
       district: dto.district,
       address: dto.address,
       description: dto.description,
+      website: normalizeWebsite(dto.website),
       images: dto.images,
       tags: dto.tags,
       hours: dto.hours,
@@ -181,6 +193,7 @@ export class AdminCitiesVenuesService {
     if (dto.district !== undefined) venue.district = dto.district;
     if (dto.address !== undefined) venue.address = dto.address;
     if (dto.description !== undefined) venue.description = dto.description;
+    if (dto.website !== undefined) venue.website = normalizeWebsite(dto.website);
     if (dto.images !== undefined) venue.images = dto.images;
     if (dto.tags !== undefined) venue.tags = dto.tags;
     if (dto.hours !== undefined) venue.hours = dto.hours;

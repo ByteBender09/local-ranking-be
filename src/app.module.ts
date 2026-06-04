@@ -35,6 +35,7 @@ import { UploadsModule } from './modules/uploads/uploads.module';
 import { MailModule } from './modules/mail/mail.module';
 import { BrandingModule } from './modules/branding/branding.module';
 import { PartnersModule } from './modules/partners/partners.module';
+import { OgModule } from './modules/og/og.module';
 
 @Module({
   imports: [
@@ -111,6 +112,7 @@ import { PartnersModule } from './modules/partners/partners.module';
     MailModule,
     BrandingModule,
     PartnersModule,
+    OgModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -37,6 +37,8 @@ export class CreateAdminVenueDto {
   @IsString() @MaxLength(5_000) description: string;
   @IsString() @MaxLength(64) hours: string;
 
+  @IsOptional() @IsString() @MaxLength(500) website?: string;
+
   @IsArray()
   @ArrayMaxSize(20)
   @IsString({ each: true })
@@ -70,6 +72,7 @@ export class UpdateAdminVenueDto {
   @IsOptional() @IsString() @MaxLength(240) address?: string;
   @IsOptional() @IsString() @MaxLength(5_000) description?: string;
   @IsOptional() @IsString() @MaxLength(64) hours?: string;
+  @IsOptional() @IsString() @MaxLength(500) website?: string;
 
   @IsOptional()
   @IsArray()
