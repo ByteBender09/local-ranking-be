@@ -34,6 +34,15 @@ export class ListVenuesDto extends PaginationDto {
   @MaxLength(80)
   district?: string;
 
+  // Free-text search across name/district/address/tags. Combined with the
+  // other filters (citySlug, category) on the same listing endpoint so the
+  // in-city quick-filter on the FE can paginate matching results — instead of
+  // only narrowing the page already loaded.
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  q?: string;
+
   @IsOptional()
   @IsIn(SORT_OPTIONS)
   sort: VenueSort = 'upvotes';

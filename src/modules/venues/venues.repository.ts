@@ -41,6 +41,21 @@ export class VenuesRepository {
       qb.andWhere('venue.category = :category', { category: filter.category });
     if (filter.district)
       qb.andWhere('venue.district = :district', { district: filter.district });
+    if (filter.q && filter.q.trim()) {
+      // Case-insensitive search across name/district/address + the tags
+      // text[] array. Mirrors the client-side filter the FE previously did
+      // (now removed so search covers the whole city, not just the loaded
+      // page). EXISTS+unnest is the standard way to LIKE-match an element
+      // of a Postgres text[].
+      const term = `%${filter.q.trim().toLowerCase()}%`;
+      qb.andWhere(
+        `(LOWER(venue.name) LIKE :term
+          OR LOWER(venue.district) LIKE :term
+          OR LOWER(venue.address) LIKE :term
+          OR EXISTS (SELECT 1 FROM unnest(venue.tags) AS tag WHERE LOWER(tag) LIKE :term))`,
+        { term },
+      );
+    }
 
     const order = this.orderBy(filter.sort);
     qb.orderBy(order.field, order.direction)
