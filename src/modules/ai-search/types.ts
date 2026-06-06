@@ -36,10 +36,13 @@ export interface ParsedIntent {
 export interface AiSearchResponse {
   query: string;
   intent: ParsedIntent | null;
-  venues: unknown[]; // hydrated Venue rows from VenuesRepository
-  // Single conversational intro to the result list. Null when the
-  // reranker didn't run (fallback path or <3 candidates) or failed.
+  venues: unknown[];
   intro: string | null;
   source: 'cache' | 'fresh' | 'fallback';
   fallbackReason?: string;
+  // When set, FE should navigate here instead of rendering AI results.
+  // Used when the query is a pure city + category filter — the city
+  // listing page gives a better UX (pagination, persistent filter)
+  // than the AI result list for that shape.
+  redirectTo?: string;
 }

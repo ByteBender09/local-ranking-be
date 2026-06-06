@@ -92,6 +92,28 @@ export class AiSearchService {
       }
     }
 
+    // Category-only fallback: user typed "tìm cafe" with no city.
+    // Default to ho-chi-minh so we have a scope to search.
+    if (intent.citySlugs.length === 0 && intent.categories.length > 0) {
+      intent.citySlugs = ['ho-chi-minh'];
+    }
+
+    // ─── Simple-filter shortcut ───────────────────────────────────
+    // A query that boils down to "city + optional category" is better
+    // served by the city listing page (pagination, persistent filter)
+    // than by the AI result list. Skip the reranker entirely.
+    const shortcut = buildShortcutUrl(intent);
+    if (shortcut) {
+      return {
+        query,
+        intent,
+        venues: [],
+        intro: null,
+        source: 'fresh',
+        redirectTo: shortcut,
+      };
+    }
+
     // ─── Filter retrieval ─────────────────────────────────────────
     const candidates = await this.fetchByIntent(intent);
     if (candidates.length === 0) {
@@ -263,4 +285,33 @@ export class AiSearchService {
 function clampResultCount(requested: number | null): number {
   if (requested === null || requested <= 0) return DEFAULT_RESULT_COUNT;
   return Math.min(requested, MAX_RESULT_COUNT);
+}
+
+// Returns the city-listing URL when the intent reduces to "one city +
+// optional single category" with no AI-specific signals. Covers three
+// shapes that don't benefit from the AI result list:
+//   - "cafe Đà Lạt"  → /c/da-lat?category=cafe
+//   - "Đà Lạt"       → /c/da-lat
+//   - "đi đâu ở Đà Lạt" (discover / trip_plan no duration) → /c/da-lat
+// A trip_plan WITH duration is an itinerary request — keep the AI path.
+function buildShortcutUrl(intent: ParsedIntent): string | null {
+  if (intent.intent === 'specific_venue') return null;
+  if (intent.citySlugs.length !== 1) return null;
+  if (intent.categories.length > 1) return null;
+  if (intent.vibeTags.length > 0) return null;
+  if (intent.audience !== null) return null;
+  if (intent.timeOfDay !== null) return null;
+  if (intent.cuisine !== null) return null;
+  if (intent.nearLandmark !== null) return null;
+  if (intent.wardQuery !== null) return null;
+  if (intent.priceMax !== null) return null;
+  if (intent.ratingMin !== null) return null;
+  if (intent.durationDays !== null && intent.durationDays > 0) return null;
+
+  const params = new URLSearchParams();
+  if (intent.categories.length === 1) params.set('category', intent.categories[0]);
+  const qs = params.toString();
+  return qs
+    ? `/c/${intent.citySlugs[0]}?${qs}`
+    : `/c/${intent.citySlugs[0]}`;
 }
