@@ -50,6 +50,19 @@ export class UsersController {
     return result;
   }
 
+  // Global leaderboard position for the authenticated user. Returns
+  //   { rank, total }
+  // where rank is 1-indexed (1 = top of board) and total counts users
+  // with > 0 check-ins (real participants only). Used by the profile
+  // page's "Hạng #X / N" tile.
+  @UseGuards(JwtAuthGuard)
+  @Get('me/rank')
+  myRank(
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<{ rank: number; total: number }> {
+    return this.users.getMyRank(user.id);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Patch('me')
   update(

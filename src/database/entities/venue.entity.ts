@@ -170,8 +170,14 @@ export class Venue {
 
   // Full weekly opening hours from the provider. The compact `hours` column
   // above stays the short string the current UI shows.
+  // Per-day opening hours from the scraper. Shape is
+  //   [{ day: "Thứ Hai", hours: "07:30–20:00" }, ...]
+  // (or the equivalent English days when the source was scraped EN). The FE
+  // uses this to render the "Open now / closed" badge — see
+  // lib/venue/externalInfo.ts. Older imports stashed the same data under
+  // external_raw.openingHours; the FE checks both with this column winning.
   @Column({ type: 'jsonb', name: 'external_opening_hours', nullable: true })
-  externalOpeningHours: string[] | null;
+  externalOpeningHours: Array<{ day: string; hours: string }> | null;
 
   @Column({ type: 'timestamptz', name: 'external_synced_at', nullable: true })
   externalSyncedAt: Date | null;

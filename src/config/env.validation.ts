@@ -51,8 +51,18 @@ export const envValidationSchema = Joi.object({
   THROTTLE_DEFAULT_LIMIT: Joi.number().default(120),
   THROTTLE_AUTH_TTL: Joi.number().default(60),
   THROTTLE_AUTH_LIMIT: Joi.number().default(10),
+  THROTTLE_AI_TTL: Joi.number().default(60),
+  THROTTLE_AI_LIMIT: Joi.number().default(8),
 
   BODY_LIMIT: Joi.string().default('1mb'),
+
+  // ── AI search ───────────────────────────────────────────────────
+  OPENROUTER_API_KEY: Joi.string().allow('').default(''),
+  AI_PARSER_MODEL: Joi.string().default('openai/gpt-4o-mini'),
+  AI_RERANKER_MODEL: Joi.string().default('openai/gpt-4o-mini'),
+  AI_TRIP_PLANNER_MODEL: Joi.string().default('openai/gpt-4o-mini'),
+  AI_CACHE_TTL_SECONDS: Joi.number().default(7 * 24 * 60 * 60),
+  AI_REQUEST_TIMEOUT_MS: Joi.number().default(20000),
 
   RESEND_API_KEY: Joi.string().allow('').default(''),
   RESEND_FROM_EMAIL: Joi.string().email().default('noreply@homnaydidau.local'),

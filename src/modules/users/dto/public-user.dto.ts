@@ -4,6 +4,9 @@ export class PublicUserDto {
   id: string;
   handle: string;
   name: string;
+  // User-chosen display override. UIs that surface a person publicly
+  // (leaderboard, venue cards) should render `nickname || name`.
+  nickname: string;
   avatar: string;
   bio: string;
   citySlug: string | null;
@@ -23,6 +26,7 @@ export class PublicUserDto {
       id: user.id,
       handle: user.handle,
       name: user.name,
+      nickname: user.nickname ?? '',
       avatar: user.avatar,
       bio: user.bio,
       citySlug: user.citySlug,

@@ -68,6 +68,15 @@ export interface MailConfig {
   backendPublicUrl: string;
 }
 
+export interface AiConfig {
+  openrouterApiKey: string;
+  parserModel: string;
+  rerankerModel: string;
+  tripPlannerModel: string;
+  cacheTtlSeconds: number;
+  requestTimeoutMs: number;
+}
+
 export interface RootConfig {
   app: AppConfig;
   database: DatabaseConfig;
@@ -78,6 +87,7 @@ export interface RootConfig {
   instagram: OAuthClientConfig;
   throttle: ThrottleConfig;
   mail: MailConfig;
+  ai: AiConfig;
 }
 
 export default (): RootConfig => ({
@@ -147,6 +157,14 @@ export default (): RootConfig => ({
       ttl: parseInt(process.env.THROTTLE_AUTH_TTL ?? '60', 10),
       limit: parseInt(process.env.THROTTLE_AUTH_LIMIT ?? '10', 10),
     },
+  },
+  ai: {
+    openrouterApiKey: process.env.OPENROUTER_API_KEY ?? '',
+    parserModel: process.env.AI_PARSER_MODEL ?? 'openai/gpt-4o-mini',
+    rerankerModel: process.env.AI_RERANKER_MODEL ?? 'openai/gpt-4o-mini',
+    tripPlannerModel: process.env.AI_TRIP_PLANNER_MODEL ?? 'openai/gpt-4o-mini',
+    cacheTtlSeconds: parseInt(process.env.AI_CACHE_TTL_SECONDS ?? `${7 * 24 * 60 * 60}`, 10),
+    requestTimeoutMs: parseInt(process.env.AI_REQUEST_TIMEOUT_MS ?? '20000', 10),
   },
   mail: {
     resendApiKey: process.env.RESEND_API_KEY ?? '',

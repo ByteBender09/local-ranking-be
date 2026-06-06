@@ -36,6 +36,7 @@ import { MailModule } from './modules/mail/mail.module';
 import { BrandingModule } from './modules/branding/branding.module';
 import { PartnersModule } from './modules/partners/partners.module';
 import { OgModule } from './modules/og/og.module';
+import { AiSearchModule } from './modules/ai-search/ai-search.module';
 
 @Module({
   imports: [
@@ -90,6 +91,15 @@ import { OgModule } from './modules/og/og.module';
               limit: t.default.limit,
             },
             { name: t.auth.name, ttl: t.auth.ttl * 1000, limit: t.auth.limit },
+            // ai tier — picked up by @Throttle({ ai: {...} }) on the AI
+            // search controller. Tighter limit than 'default' because each
+            // request can cost real LLM money.
+            {
+              name: 'ai',
+              ttl:
+                parseInt(process.env.THROTTLE_AI_TTL ?? '60', 10) * 1000,
+              limit: parseInt(process.env.THROTTLE_AI_LIMIT ?? '8', 10),
+            },
           ],
         };
       },
@@ -113,6 +123,7 @@ import { OgModule } from './modules/og/og.module';
     BrandingModule,
     PartnersModule,
     OgModule,
+    AiSearchModule,
   ],
   controllers: [HealthController],
   providers: [

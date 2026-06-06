@@ -491,7 +491,7 @@ async function main(): Promise<void> {
           externalRating: rating,
           externalReviewCount: reviewCount,
           externalId: placeId,
-          externalOpeningHours: (p.openingHours ?? null) as unknown as string[] | null,
+          externalOpeningHours: p.openingHours ?? null,
           externalSyncedAt: new Date(),
           externalRaw: trimRaw(p),
           source: 'google',

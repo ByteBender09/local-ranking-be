@@ -19,6 +19,8 @@ export class UserSocialsDto {
 
 export class UpdateProfileDto {
   @IsOptional() @IsString() @MaxLength(40) name?: string;
+  // User-editable display name override. Empty string clears it.
+  @IsOptional() @IsString() @MaxLength(40) nickname?: string;
   @IsOptional() @IsString() @MaxLength(280) bio?: string;
   @IsOptional() @IsBoolean() bookingEnabled?: boolean;
 

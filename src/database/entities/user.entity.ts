@@ -54,8 +54,17 @@ export class User {
   @Column({ type: 'varchar', length: 200, nullable: true })
   email: string | null;
 
+  // Legal/display name as captured from OAuth (Google → "Nguyễn Văn A").
+  // Kept as the immutable identity record. UI should render `nickname`
+  // when set and fall back to this — see PublicUserDto.from().
   @Column({ type: 'varchar', length: 120 })
   name: string;
+
+  // User-chosen display name. Optional override of `name` on leaderboards
+  // and other public surfaces. Empty string means "no nickname, use name".
+  // Length-capped to 40 (matches FE input).
+  @Column({ type: 'varchar', length: 40, default: '' })
+  nickname: string;
 
   @Column({ type: 'varchar', length: 500 })
   avatar: string;

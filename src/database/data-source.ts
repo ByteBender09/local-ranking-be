@@ -14,6 +14,7 @@ import {
   TourStop,
   Brand,
   Ward,
+  AiSearchCache,
 } from './entities';
 
 dotenv.config();
@@ -23,7 +24,7 @@ const ssl = process.env.DB_SSL === 'true';
 export const dataSourceOptions: DataSourceOptions = {
   type: 'postgres',
   url: process.env.DATABASE_URL,
-  entities: [City, Venue, User, Review, Vote, CheckIn, JourneyEntry, SavedVenue, Tour, TourStop, Brand, Ward],
+  entities: [City, Venue, User, Review, Vote, CheckIn, JourneyEntry, SavedVenue, Tour, TourStop, Brand, Ward, AiSearchCache],
   migrations: [__dirname + '/migrations/*.{js,ts}'],
   synchronize: process.env.DB_SYNCHRONIZE === 'true',
   logging: process.env.DB_LOGGING === 'true',

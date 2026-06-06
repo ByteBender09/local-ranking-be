@@ -15,3 +15,4 @@ export { TourStop } from './tour-stop.entity';
 export { Brand } from './brand.entity';
 export { Ward } from './ward.entity';
 export type { WardType } from './ward.entity';
+export { AiSearchCache } from './ai-search-cache.entity';

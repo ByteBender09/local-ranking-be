@@ -51,6 +51,14 @@ export function normalize(s: string): string {
     .replace(/tp\.?\s*/g, '')
     .replace(/tx\.?\s*/g, '')
     .replace(/tt\.?\s*/g, '')
+    // English → Vietnamese admin-unit aliases, applied SYMMETRICALLY to
+    // both stored aliases and incoming queries. "District 3" and "Quận 3"
+    // collapse to the same normalized "quan 3" so we don't have to dual-
+    // list every English variant in every ward seed. Same trick for
+    // "Ward N" → "phuong N" (English speakers occasionally write that).
+    .replace(/\bdistrict\s+(\d+)/g, 'quan $1')
+    .replace(/\bdist\.?\s+(\d+)/g, 'quan $1')
+    .replace(/\bward\s+(\d+)/g, 'phuong $1')
     .replace(/[,\.;]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()

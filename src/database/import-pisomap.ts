@@ -337,7 +337,7 @@ async function main(): Promise<void> {
             externalRating: extRating,
             externalReviewCount: extReviews,
             externalId: matched?.data_id ?? null,
-            externalOpeningHours: (matched?.opening_hours ?? null) as unknown as string[] | null,
+            externalOpeningHours: matched?.opening_hours ?? null,
             externalSyncedAt: matched ? new Date() : null,
             externalRaw: place ? ({
               data_id: place.data_id, place_id: place.place_id, type: place.type,
