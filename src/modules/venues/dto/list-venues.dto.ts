@@ -34,6 +34,16 @@ export class ListVenuesDto extends PaginationDto {
   @MaxLength(80)
   district?: string;
 
+  // Post-2025 ward filter — accepts EITHER a canonical ward name (e.g.
+  // "Phú Xuân", "Bến Thành") OR an old district name (e.g. "Quận 3",
+  // "Hoàn Kiếm"). VenuesService expands aliases via WardNormalizerService
+  // before hitting the repo, so a single query like ward=Quận+3 returns
+  // every venue across all new wards that absorbed District 3 territory.
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  ward?: string;
+
   // Free-text search across name/district/address/tags. Combined with the
   // other filters (citySlug, category) on the same listing endpoint so the
   // in-city quick-filter on the FE can paginate matching results — instead of

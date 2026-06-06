@@ -1,0 +1,195 @@
+import type { DestinationSeed } from './types';
+
+// Quảng Ninh kept its province but consolidated to 54 units (30 phường +
+// 22 xã + 2 đặc khu Vân Đồn & Cô Tô). Tourism is heavily Hạ Long city
+// (Bãi Cháy, Hồng Gai, Hạ Long) + Móng Cái + the đặc khu islands.
+const seed: DestinationSeed = {
+  citySlug: 'quang-ninh',
+  wards: [
+    {
+      name: 'Bãi Cháy',
+      type: 'phuong',
+      aliasesOldDistrict: ['Hạ Long', 'TP Hạ Long', 'Bãi Cháy'],
+      aliasesOldWards: ['Bãi Cháy', 'Hùng Thắng', 'Khu 4'],
+      aliasesUser: ['vịnh Hạ Long', 'Ha Long Bay', 'Sun World Hạ Long', 'bãi tắm Bãi Cháy'],
+    },
+    {
+      name: 'Hồng Gai',
+      type: 'phuong',
+      aliasesOldDistrict: ['Hạ Long', 'TP Hạ Long'],
+      aliasesOldWards: ['Bạch Đằng', 'Trần Hưng Đạo', 'Hồng Gai', 'Khu Đô Thị Hòn', 'Vinhomes Dragon Bay'],
+      aliasesUser: ['Hồng Gai', 'cảng tàu Hồng Gai'],
+    },
+    {
+      name: 'Hạ Long',
+      type: 'phuong',
+      aliasesOldDistrict: ['Hạ Long', 'TP Hạ Long'],
+      aliasesOldWards: ['Hồng Hà', 'Hồng Hải', 'Hạ Long'],
+    },
+    {
+      name: 'Hà Tu',
+      type: 'phuong',
+      aliasesOldDistrict: ['Hạ Long'],
+      aliasesOldWards: ['Hà Tu', 'Hà Phong', 'Hà Trung'],
+    },
+    {
+      name: 'Tuần Châu',
+      type: 'phuong',
+      aliasesOldDistrict: ['Hạ Long'],
+      aliasesOldWards: ['Tuần Châu', 'Đại Yên', 'Việt Hưng', 'Ngọc Châu'],
+      aliasesUser: ['đảo Tuần Châu', 'cảng Tuần Châu'],
+    },
+    {
+      name: 'Cẩm Phả',
+      type: 'phuong',
+      aliasesOldDistrict: ['Cẩm Phả', 'TP Cẩm Phả'],
+      aliasesOldWards: ['Cẩm Tây', 'Cẩm Trung', 'Cẩm Thành', 'Cẩm Bình', 'Cẩm Đông', 'Cẩm Phú', 'Cẩm Sơn', 'Cẩm Thạch', 'Cẩm Thịnh', 'Cẩm Thủy', 'Cửa Ông', 'Mông Dương'],
+    },
+    {
+      name: 'Quang Hanh',
+      type: 'phuong',
+      aliasesOldDistrict: ['Cẩm Phả'],
+      aliasesOldWards: ['Quang Hanh'],
+      aliasesUser: ['suối khoáng nóng Yoko Onsen'],
+    },
+    {
+      name: 'Móng Cái 1',
+      type: 'phuong',
+      aliasesOldDistrict: ['Móng Cái', 'TP Móng Cái'],
+      aliasesOldWards: ['Trần Phú', 'Hòa Lạc', 'Ninh Dương', 'Tràng Vĩ', 'Nam Thọ', 'Đông Thịnh', 'Thôn 9', 'Khu đô thị Green Park', 'Khu 4', 'P, Móng Cái 1'],
+      aliasesUser: ['cửa khẩu Móng Cái', 'biên giới'],
+    },
+    {
+      name: 'Móng Cái 2',
+      type: 'phuong',
+      aliasesOldDistrict: ['Móng Cái'],
+      aliasesOldWards: ['Ka Long', 'Trà Cổ', 'Bình Ngọc'],
+      aliasesUser: ['biển Trà Cổ', 'mũi Sa Vĩ'],
+    },
+    {
+      name: 'Móng Cái 3',
+      type: 'phuong',
+      aliasesOldDistrict: ['Móng Cái'],
+      aliasesOldWards: ['Hải Yên', 'Hải Đông', 'Hải Tiến', 'Vạn Ninh'],
+    },
+    {
+      name: 'Vĩnh Thực',
+      type: 'xa',
+      aliasesOldDistrict: ['Móng Cái'],
+      aliasesOldWards: ['Vĩnh Thực', 'Vĩnh Trung'],
+      aliasesUser: ['đảo Vĩnh Thực'],
+    },
+    {
+      name: 'Hải Sơn',
+      type: 'xa',
+      aliasesOldDistrict: ['Móng Cái'],
+      aliasesOldWards: ['Hải Sơn', 'Pò Hèn'],
+      aliasesUser: ['đài tưởng niệm Pò Hèn'],
+    },
+    {
+      name: 'Uông Bí',
+      type: 'phuong',
+      aliasesOldDistrict: ['Uông Bí', 'TP Uông Bí'],
+      aliasesOldWards: ['Quang Trung', 'Trưng Vương', 'Thanh Sơn', 'Yên Thanh', 'Phương Đông', 'Phương Nam', 'Khu Đô Thị'],
+      aliasesUser: ['Yên Tử', 'chùa Đồng Yên Tử'],
+    },
+    {
+      name: 'Yên Tử',
+      type: 'xa',
+      aliasesOldDistrict: ['Uông Bí'],
+      aliasesOldWards: ['Vàng Danh', 'Bắc Sơn'],
+      aliasesUser: ['núi Yên Tử', 'chùa Hoa Yên'],
+    },
+    {
+      name: 'An Sinh',
+      type: 'xa',
+      aliasesOldDistrict: ['Đông Triều', 'TX Đông Triều'],
+      aliasesOldWards: ['An Sinh', 'Bình Khê', 'Tràng An'],
+      aliasesUser: ['Ngọa Vân', 'am Ngọa Vân'],
+    },
+    {
+      name: 'Đông Triều',
+      type: 'phuong',
+      aliasesOldDistrict: ['Đông Triều'],
+      aliasesOldWards: ['Đông Triều', 'Mạo Khê', 'Đức Chính', 'Hưng Đạo'],
+    },
+    {
+      name: 'Quảng Yên',
+      type: 'phuong',
+      aliasesOldDistrict: ['Quảng Yên', 'TX Quảng Yên'],
+      aliasesOldWards: ['Quảng Yên', 'Yên Giang', 'Đông Mai', 'Tân An', 'Hà An', 'Cộng Hòa'],
+    },
+    {
+      name: 'Bình Liêu',
+      type: 'xa',
+      aliasesOldDistrict: ['Bình Liêu', 'Huyện Bình Liêu'],
+      aliasesOldWards: ['Bình Liêu', 'Húc Động', 'Đồng Tâm', 'Lục Hồn', 'Nà Phạ', 'Bình Quân', 'Khu Chiến Chang'],
+      aliasesUser: ['đỉnh Cao Ly', 'biên giới Bình Liêu'],
+    },
+    {
+      name: 'Hoành Mô',
+      type: 'xa',
+      aliasesOldDistrict: ['Bình Liêu'],
+      aliasesOldWards: ['Hoành Mô', 'Đồng Văn'],
+      aliasesUser: ['cửa khẩu Hoành Mô'],
+    },
+    {
+      name: 'Tiên Yên',
+      type: 'xa',
+      aliasesOldDistrict: ['Tiên Yên', 'Huyện Tiên Yên'],
+      aliasesOldWards: ['Tiên Yên', 'Đông Hải', 'Đông Ngũ', 'Hải Lạng'],
+    },
+    {
+      name: 'Đông Ngũ',
+      type: 'xa',
+      aliasesOldDistrict: ['Tiên Yên'],
+      aliasesOldWards: ['Đông Ngũ', 'Đông Hải'],
+    },
+    {
+      name: 'Đường Hoa',
+      type: 'xa',
+      aliasesOldDistrict: ['Hải Hà', 'Huyện Hải Hà'],
+      aliasesOldWards: ['Đường Hoa', 'Quảng Long'],
+    },
+    {
+      name: 'Hải Ninh',
+      type: 'xa',
+      aliasesOldDistrict: ['Hải Hà'],
+      aliasesOldWards: ['Hải Ninh', 'Quảng Thắng', 'Quảng Thành'],
+    },
+    {
+      name: 'Quảng Đức',
+      type: 'xa',
+      aliasesOldDistrict: ['Hải Hà'],
+      aliasesOldWards: ['Quảng Đức', 'Quảng Sơn'],
+    },
+    {
+      name: 'Quảng La',
+      type: 'xa',
+      aliasesOldDistrict: ['Hoành Bồ', 'Huyện Hoành Bồ'],
+      aliasesOldWards: ['Quảng La', 'Dân Chủ', 'Tân Dân', 'Bằng Cả'],
+    },
+    {
+      name: 'Thống Nhất',
+      type: 'xa',
+      aliasesOldDistrict: ['Hoành Bồ'],
+      aliasesOldWards: ['Thống Nhất', 'Vũ Oai'],
+    },
+    {
+      name: 'Vân Đồn',
+      type: 'dac_khu',
+      aliasesOldDistrict: ['Vân Đồn', 'Huyện Vân Đồn'],
+      aliasesOldWards: ['Cái Rồng', 'Đông Xá', 'Hạ Long', 'Quan Lạn', 'Minh Châu'],
+      aliasesUser: ['đảo Quan Lạn', 'đảo Cô Tô', 'Minh Châu', 'sân bay Vân Đồn'],
+    },
+    {
+      name: 'Cô Tô',
+      type: 'dac_khu',
+      aliasesOldDistrict: ['Cô Tô', 'Huyện Cô Tô'],
+      aliasesOldWards: ['Cô Tô', 'Thanh Lân'],
+      aliasesUser: ['đảo Cô Tô', 'Cô Tô con'],
+    },
+  ],
+};
+
+export default seed;

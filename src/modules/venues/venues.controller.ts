@@ -67,6 +67,16 @@ export class VenuesController {
     return this.venues.sitemapEntries();
   }
 
+  // Canonical post-2025 wards in a city, for ward-filter UI. Each entry
+  // includes the old district name(s) it covers so the chip can render
+  // "Bến Thành (was Quận 1)". Declared before ':slug'.
+  @Get('wards')
+  wards(
+    @Query('citySlug') citySlug: string,
+  ): Promise<Array<{ name: string; type: string; aliasesOldDistrict: string[] }>> {
+    return this.venues.wardsForCity(citySlug);
+  }
+
   @Get(':slug')
   bySlug(@Param('slug') slug: string): Promise<Venue> {
     return this.venues.getBySlug(slug);

@@ -17,6 +17,7 @@ import {
 } from './dto/list-admin-venues.dto';
 import { UpdateCityDto } from './dto/update-city.dto';
 import { CitiesService } from '../cities/cities.service';
+import { WardNormalizerService } from '../venues/ward-normalizer.service';
 
 // Normalise a user-entered website into a stored value: trim, drop when empty,
 // and prepend https:// when the scheme is missing so the FE always gets a
@@ -45,7 +46,33 @@ export class AdminCitiesVenuesService {
     @InjectRepository(City) private readonly cities: Repository<City>,
     @InjectRepository(Venue) private readonly venues: Repository<Venue>,
     private readonly citiesService: CitiesService,
+    private readonly wardNormalizer: WardNormalizerService,
   ) {}
+
+  // Re-resolve ward_canonical from district + address. Called on create
+  // and on every update that changes district / address / cityId — those
+  // are the only inputs the normalizer reads, so unrelated edits don't
+  // pay the lookup cost.
+  private async resolveWardFor(venue: Venue): Promise<void> {
+    const city = await this.cities.findOne({
+      where: { id: venue.cityId },
+      select: { slug: true },
+    });
+    if (!city) return;
+    const result = this.wardNormalizer.resolve({
+      citySlug: city.slug,
+      rawDistrict: venue.district,
+    });
+    if (result) {
+      venue.wardCanonical = result.wardCanonical;
+      venue.wardType = result.wardType;
+      venue.wardResolutionMethod = result.method;
+    } else {
+      venue.wardCanonical = null;
+      venue.wardType = null;
+      venue.wardResolutionMethod = null;
+    }
+  }
 
   // CITIES ----------------------------------------------------------
 
@@ -106,7 +133,11 @@ export class AdminCitiesVenuesService {
     if (filter.q && filter.q.trim()) {
       const term = `%${filter.q.trim().toLowerCase()}%`;
       qb.andWhere(
-        '(LOWER(venue.name) LIKE :term OR LOWER(venue.district) LIKE :term OR LOWER(venue.address) LIKE :term OR LOWER(venue.slug) LIKE :term)',
+        `(LOWER(venue.name) LIKE :term
+          OR LOWER(venue.district) LIKE :term
+          OR LOWER(COALESCE(venue.ward_canonical, '')) LIKE :term
+          OR LOWER(venue.address) LIKE :term
+          OR LOWER(venue.slug) LIKE :term)`,
         { term },
       );
     }
@@ -175,6 +206,7 @@ export class AdminCitiesVenuesService {
       reviewCount: 0,
       upvotes: 0,
     });
+    await this.resolveWardFor(venue);
     const saved = await this.venues.save(venue);
     // venueCount changed for this city — bust the listing cache.
     await this.citiesService.invalidateBySlug(city.slug);
@@ -201,6 +233,12 @@ export class AdminCitiesVenuesService {
     if (dto.lat !== undefined) venue.lat = dto.lat;
     if (dto.lng !== undefined) venue.lng = dto.lng;
     if (dto.isPublished !== undefined) venue.isPublished = dto.isPublished;
+    // Re-resolve ward whenever any input the normalizer reads has changed.
+    // Currently that's just `district`, but if we ever feed the address
+    // into normalization at this layer too, extend the condition.
+    if (dto.district !== undefined || dto.cityId !== undefined) {
+      await this.resolveWardFor(venue);
+    }
     const saved = await this.venues.save(venue);
     await this.invalidateForVenue(saved);
     return saved;

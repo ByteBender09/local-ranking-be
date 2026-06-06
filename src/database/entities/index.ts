@@ -13,3 +13,5 @@ export { Tour } from './tour.entity';
 export type { TourProviderInfo, TourPromotion, TourScope } from './tour.entity';
 export { TourStop } from './tour-stop.entity';
 export { Brand } from './brand.entity';
+export { Ward } from './ward.entity';
+export type { WardType } from './ward.entity';

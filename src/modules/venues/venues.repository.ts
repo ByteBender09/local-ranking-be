@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import { Venue } from '../../database/entities';
+import { Venue, Ward } from '../../database/entities';
 import { ListVenuesDto, VenueSort } from './dto/list-venues.dto';
 import { bayesianScoreExpr } from './ranking';
 
@@ -9,7 +9,29 @@ import { bayesianScoreExpr } from './ranking';
 export class VenuesRepository {
   constructor(
     @InjectRepository(Venue) private readonly repo: Repository<Venue>,
+    @InjectRepository(Ward) private readonly wardRepo: Repository<Ward>,
   ) {}
+
+  // Listing of all canonical wards (post-2025) in a city, for FE chips
+  // and admin filters. Only returns name + type + old-district aliases —
+  // the alias list is what the UI shows beneath the new name so users
+  // recognize the new ward by its old quận label.
+  async wardsForCity(
+    citySlug: string,
+  ): Promise<Array<{ name: string; type: string; aliasesOldDistrict: string[] }>> {
+    const rows = await this.wardRepo
+      .createQueryBuilder('w')
+      .innerJoin('w.city', 'c')
+      .select(['w.name', 'w.type', 'w.aliasesOldDistrict'])
+      .where('c.slug = :citySlug', { citySlug })
+      .orderBy('w.name', 'ASC')
+      .getMany();
+    return rows.map((w) => ({
+      name: w.name,
+      type: w.type,
+      aliasesOldDistrict: w.aliasesOldDistrict,
+    }));
+  }
 
   private orderBy(sort: VenueSort): {
     field: string;
@@ -29,7 +51,14 @@ export class VenuesRepository {
     }
   }
 
-  findPaged(filter: ListVenuesDto): Promise<[Venue[], number]> {
+  findPaged(
+    filter: ListVenuesDto,
+    // Pre-expanded canonical ward names from the service layer. When non-
+    // empty, restricts results to venues whose ward_canonical is in the
+    // list. Empty array = no ward filter (service decided the query
+    // matched nothing; ListVenuesDto.ward was set but didn't resolve).
+    canonicalWards: string[] = [],
+  ): Promise<[Venue[], number]> {
     const qb = this.repo
       .createQueryBuilder('venue')
       .innerJoinAndSelect('venue.city', 'city')
@@ -41,16 +70,22 @@ export class VenuesRepository {
       qb.andWhere('venue.category = :category', { category: filter.category });
     if (filter.district)
       qb.andWhere('venue.district = :district', { district: filter.district });
+    if (canonicalWards.length > 0)
+      qb.andWhere('venue.ward_canonical IN (:...canonicalWards)', {
+        canonicalWards,
+      });
     if (filter.q && filter.q.trim()) {
-      // Case-insensitive search across name/district/address + the tags
-      // text[] array. Mirrors the client-side filter the FE previously did
-      // (now removed so search covers the whole city, not just the loaded
-      // page). EXISTS+unnest is the standard way to LIKE-match an element
+      // Case-insensitive search across name/district/ward/address + the
+      // tags text[]. `ward_canonical` is the post-2025 official name shown
+      // in the UI; `district` is the raw scraper string kept as fallback.
+      // Both are matched so typing either the new or old name finds the
+      // venue. EXISTS+unnest is the standard way to LIKE-match an element
       // of a Postgres text[].
       const term = `%${filter.q.trim().toLowerCase()}%`;
       qb.andWhere(
         `(LOWER(venue.name) LIKE :term
           OR LOWER(venue.district) LIKE :term
+          OR LOWER(COALESCE(venue.ward_canonical, '')) LIKE :term
           OR LOWER(venue.address) LIKE :term
           OR EXISTS (SELECT 1 FROM unnest(venue.tags) AS tag WHERE LOWER(tag) LIKE :term))`,
         { term },
@@ -140,7 +175,10 @@ export class VenuesRepository {
       .innerJoinAndSelect('venue.city', 'city')
       .where('venue.is_published = true')
       .andWhere(
-        '(LOWER(venue.name) LIKE :term OR LOWER(venue.district) LIKE :term OR LOWER(venue.address) LIKE :term)',
+        `(LOWER(venue.name) LIKE :term
+          OR LOWER(venue.district) LIKE :term
+          OR LOWER(COALESCE(venue.ward_canonical, '')) LIKE :term
+          OR LOWER(venue.address) LIKE :term)`,
         { term },
       )
       .orderBy('venue.upvotes', 'DESC')

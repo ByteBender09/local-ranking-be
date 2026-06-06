@@ -6,8 +6,17 @@ import axios from 'axios';
 import sharp from 'sharp';
 import { DataSource } from 'typeorm';
 import { dataSourceOptions } from './data-source';
-import { City, Venue } from './entities';
+import { City, Venue, Ward } from './entities';
 import type { Category } from './entities';
+import {
+  resolveWardFromVenue,
+  toNormalizable,
+  type NormalizableWard,
+} from '../modules/venues/ward-resolver';
+import {
+  resolveByNearestAnchor,
+  type AnchorPoint,
+} from '../modules/venues/ward-geo-resolver';
 
 dotenv.config();
 
@@ -322,6 +331,53 @@ async function main(): Promise<void> {
   await ds.initialize();
   const cityRepo = ds.getRepository(City);
   const venueRepo = ds.getRepository(Venue);
+  const wardRepo = ds.getRepository(Ward);
+
+  // Build the city → wards index once. Used to resolve the post-2025
+  // canonical ward for every scraped venue at insert time so future search
+  // can filter by ward_canonical without a backfill pass.
+  const wardEntities = await wardRepo
+    .createQueryBuilder('w')
+    .innerJoin('w.city', 'c')
+    .select(['w.name', 'w.type', 'w.aliasesOldDistrict', 'w.aliasesOldWards', 'w.aliasesUser'])
+    .addSelect('c.slug', 'city_slug')
+    .getRawAndEntities();
+  const wardsByCity = new Map<string, NormalizableWard[]>();
+  for (let i = 0; i < wardEntities.entities.length; i++) {
+    const w = wardEntities.entities[i];
+    const slug = wardEntities.raw[i].city_slug as string;
+    const list = wardsByCity.get(slug) ?? [];
+    list.push(...toNormalizable([w]));
+    wardsByCity.set(slug, list);
+  }
+  console.log(
+    `Loaded ${wardEntities.entities.length} wards across ${wardsByCity.size} cities for normalization`,
+  );
+
+  // Anchor points for Stage 3 geo fallback at import time. Pulled from
+  // already-resolved venues in DB so the nearest-neighbor check works on
+  // every newly scraped venue. Refreshed once at startup — the index gets
+  // ever-so-slightly stale during a long run but the trade-off (re-querying
+  // per venue) isn't worth it for our scale.
+  const anchorRows = await ds.query<
+    { city_slug: string; ward_canonical: string; ward_type: string; lat: number; lng: number }[]
+  >(
+    `SELECT c.slug AS city_slug, v.ward_canonical, v.ward_type, v.lat, v.lng
+     FROM venues v JOIN cities c ON c.id = v.city_id
+     WHERE v.ward_canonical IS NOT NULL AND v.lat <> 0 AND v.lng <> 0`,
+  );
+  const anchorsByCity = new Map<string, AnchorPoint[]>();
+  for (const row of anchorRows) {
+    const list = anchorsByCity.get(row.city_slug) ?? [];
+    list.push({
+      wardCanonical: row.ward_canonical,
+      wardType: row.ward_type as 'phuong' | 'xa' | 'dac_khu',
+      lat: row.lat,
+      lng: row.lng,
+    });
+    anchorsByCity.set(row.city_slug, list);
+  }
+  console.log(`Loaded ${anchorRows.length} geo anchor points for Stage 3 fallback`);
 
   const cities = (await cityRepo.find()).filter((c) => !FLAGS.onlyCity || c.slug === FLAGS.onlyCity);
   const weightTotal = Object.values(CITY_WEIGHTS).reduce((a, b) => a + b, 0);
@@ -398,13 +454,36 @@ async function main(): Promise<void> {
 
         const rating = p.totalScore ?? 0;
         const reviewCount = p.reviewsCount ?? 0;
+        const rawDistrict = (p.neighborhood || p.street || city.name).slice(0, 80);
+        const rawAddress = (p.address ?? '').slice(0, 240);
+        // Resolve to post-2025 canonical ward in 3 stages:
+        //   1+2: text — district then address tokens
+        //   3:   geo — nearest already-resolved venue in same city
+        // Only venues that fail ALL three land with isPublished=false for
+        // admin triage. With ~98% Stage 1+2 coverage and geo catching the
+        // generic-city stragglers, unresolved should be a handful of
+        // Plus Codes / 0,0-coordinate scraper errors.
+        const cityWards = wardsByCity.get(city.slug) ?? [];
+        const lat = p.location?.lat ?? 0;
+        const lng = p.location?.lng ?? 0;
+        let resolution = resolveWardFromVenue(rawDistrict, rawAddress, cityWards);
+        if (!resolution) {
+          const geo = resolveByNearestAnchor(lat, lng, anchorsByCity.get(city.slug) ?? []);
+          if (geo) resolution = geo;
+        }
+        if (!resolution) {
+          console.warn(`    unresolved ward: "${rawDistrict}" for ${name} — staging unpublished`);
+        }
         await venueRepo.save(venueRepo.create({
           slug,
           name: name.slice(0, 160),
           category,
           cityId: city.id,
-          district: (p.neighborhood || p.street || city.name).slice(0, 80),
-          address: (p.address ?? '').slice(0, 240),
+          district: rawDistrict,
+          wardCanonical: resolution?.wardCanonical ?? null,
+          wardType: resolution?.wardType ?? null,
+          wardResolutionMethod: resolution?.method ?? null,
+          address: rawAddress,
           description: buildDescription(p, category, city.name),
           images,
           rating,
@@ -420,9 +499,12 @@ async function main(): Promise<void> {
           priceRange: priceTier(p.price),
           tags: buildTags(p),
           hours: compactHours(p.openingHours),
-          lat: p.location?.lat ?? 0,
-          lng: p.location?.lng ?? 0,
-          isPublished: true,
+          lat,
+          lng,
+          // Unresolved ward → unpublished. Admin reviews, either edits the
+          // raw district / corrects the seed alias, then re-runs the
+          // backfill which flips isPublished back when ward resolves.
+          isPublished: resolution !== null,
         }));
         progress[placeId] = 'saved'; saveProgress(progress);
         created++;

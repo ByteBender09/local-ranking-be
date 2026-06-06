@@ -58,8 +58,38 @@ export class Venue {
   @JoinColumn({ name: 'city_id' })
   city: City;
 
+  // RAW district string as scraped — kept for provenance + debugging.
+  // Authoritative location for search/UX is `wardCanonical` below, set by
+  // WardNormalizerService at import time (or by the backfill migration for
+  // legacy rows). 99% of rows have raw values like "Phú Xuân" or "Quận 5"
+  // — sometimes the new post-2025 ward name, sometimes an abolished district.
   @Column({ type: 'varchar', length: 80 })
   district: string;
+
+  // Canonical post-2025 phường/xã/đặc khu name. NULL means the normalizer
+  // could not resolve this venue and an admin needs to triage. References
+  // wards.name (city_id + name unique).
+  @Index('idx_venues_ward_canonical')
+  @Column({ type: 'varchar', length: 120, name: 'ward_canonical', nullable: true })
+  wardCanonical: string | null;
+
+  // Mirrors wards.type for the resolved ward — denormalized to avoid a join
+  // in hot search paths.
+  @Column({ type: 'varchar', length: 16, name: 'ward_type', nullable: true })
+  wardType: 'phuong' | 'xa' | 'dac_khu' | null;
+
+  // How `wardCanonical` was determined. Used to monitor normalizer quality
+  // and decide which rows are safe to trust. 'exact' = raw district matched
+  // ward name verbatim; 'alias' = matched via aliases_*; 'geo' = lat/lng
+  // point-in-polygon (Stage 3, not yet implemented); 'manual' = admin set
+  // it; NULL = unresolved.
+  @Column({
+    type: 'varchar',
+    length: 16,
+    name: 'ward_resolution_method',
+    nullable: true,
+  })
+  wardResolutionMethod: 'exact' | 'alias' | 'geo' | 'manual' | null;
 
   @Column({ type: 'varchar', length: 240 })
   address: string;
