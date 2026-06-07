@@ -9,6 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
+import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import {
   AuthenticatedUser,
@@ -23,6 +24,7 @@ export class ReviewsController {
   constructor(private readonly reviews: ReviewsService) {}
 
   @Public()
+  @PublicCache({ sMaxAge: 60, staleWhileRevalidate: 300 })
   @Get('venues/:venueId/reviews')
   list(@Param('venueId') venueId: string): Promise<Review[]> {
     return this.reviews.listByVenue(venueId);

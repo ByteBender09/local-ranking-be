@@ -6,7 +6,7 @@ import { In, ObjectLiteral, Repository, SelectQueryBuilder } from 'typeorm';
 import { CheckIn, SavedVenue, Vote, Venue } from '../../database/entities';
 import { bayesianScoreExpr } from '../venues/ranking';
 
-const CACHE_TTL_MS = 60 * 1000;
+const CACHE_TTL_MS = 5 * 60 * 1000;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 

@@ -113,6 +113,12 @@ export class Venue {
   @Column({ type: 'text', array: true, default: () => 'ARRAY[]::text[]' })
   images: string[];
 
+  // Background image rehost state. NULL = nothing pending/failed.
+  // `pending` = external URLs queued for download → sharp → swap into images[].
+  // `failed` = external URLs the worker gave up on (retry-able via admin UI).
+  @Column({ type: 'jsonb', name: 'image_ingestion_status', nullable: true })
+  imageIngestionStatus: { pending: string[]; failed: string[] } | null;
+
   @Column({
     type: 'numeric',
     precision: 3,

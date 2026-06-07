@@ -5,18 +5,20 @@ import { CheckIn, JourneyEntry, Venue } from '../../database/entities';
 
 @Injectable()
 export class JourneyService {
+  private readonly healed = new Set<string>();
+
   constructor(
-    @InjectRepository(JourneyEntry) private readonly entries: Repository<JourneyEntry>,
+    @InjectRepository(JourneyEntry)
+    private readonly entries: Repository<JourneyEntry>,
     @InjectRepository(Venue) private readonly venues: Repository<Venue>,
     @InjectRepository(CheckIn) private readonly checkIns: Repository<CheckIn>,
   ) {}
 
   async list(userId: string): Promise<JourneyEntry[]> {
-    // Self-heal: anyone who checked in before the auto-add-journey logic
-    // was wired up has check-ins without matching journey rows. On every
-    // /me/journey read we top up the missing entries so the timeline reflects
-    // their full history instead of starting empty.
-    await this.backfillFromCheckIns(userId);
+    if (!this.healed.has(userId)) {
+      this.healed.add(userId);
+      await this.backfillFromCheckIns(userId);
+    }
     return this.entries.find({
       where: { userId },
       relations: { venue: { city: true } },
@@ -43,7 +45,11 @@ export class JourneyService {
     );
   }
 
-  async add(venueSlug: string, userId: string, note?: string): Promise<JourneyEntry> {
+  async add(
+    venueSlug: string,
+    userId: string,
+    note?: string,
+  ): Promise<JourneyEntry> {
     const venue = await this.venues.findOne({ where: { slug: venueSlug } });
     if (!venue) throw new NotFoundException(`Venue not found: ${venueSlug}`);
 
@@ -52,7 +58,11 @@ export class JourneyService {
     });
     if (existing) return existing;
 
-    const created = this.entries.create({ venueId: venue.id, userId, note: note ?? null });
+    const created = this.entries.create({
+      venueId: venue.id,
+      userId,
+      note: note ?? null,
+    });
     return this.entries.save(created);
   }
 
@@ -76,9 +86,7 @@ export class JourneyService {
     const fresh = validVenues.filter((v) => !seen.has(v.id));
     if (fresh.length === 0) return 0;
 
-    await this.entries.insert(
-      fresh.map((v) => ({ userId, venueId: v.id })),
-    );
+    await this.entries.insert(fresh.map((v) => ({ userId, venueId: v.id })));
     return fresh.length;
   }
 }

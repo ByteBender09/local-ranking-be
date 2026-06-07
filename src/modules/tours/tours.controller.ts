@@ -7,11 +7,13 @@ import {
   Query,
 } from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
+import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { Category, Tour } from '../../database/entities';
 import { ToursService } from './tours.service';
 
 @Controller('tours')
 @Public()
+@PublicCache({ sMaxAge: 300, staleWhileRevalidate: 3600 })
 export class ToursController {
   constructor(private readonly tours: ToursService) {}
 

@@ -145,17 +145,17 @@ export default (): RootConfig => ({
     short: {
       name: 'short',
       ttl: parseInt(process.env.THROTTLE_SHORT_TTL ?? '1', 10),
-      limit: parseInt(process.env.THROTTLE_SHORT_LIMIT ?? '20', 10),
+      limit: parseInt(process.env.THROTTLE_SHORT_LIMIT ?? '40', 10),
     },
     default: {
       name: 'default',
       ttl: parseInt(process.env.THROTTLE_DEFAULT_TTL ?? '60', 10),
-      limit: parseInt(process.env.THROTTLE_DEFAULT_LIMIT ?? '120', 10),
+      limit: parseInt(process.env.THROTTLE_DEFAULT_LIMIT ?? '240', 10),
     },
     auth: {
       name: 'auth',
       ttl: parseInt(process.env.THROTTLE_AUTH_TTL ?? '60', 10),
-      limit: parseInt(process.env.THROTTLE_AUTH_LIMIT ?? '10', 10),
+      limit: parseInt(process.env.THROTTLE_AUTH_LIMIT ?? '30', 10),
     },
   },
   ai: {

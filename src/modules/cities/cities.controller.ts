@@ -1,10 +1,12 @@
 import { Controller, Get, Param } from '@nestjs/common';
 import { CitiesService } from './cities.service';
 import { Public } from '../../common/decorators/public.decorator';
+import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { City } from '../../database/entities';
 
 @Controller('cities')
 @Public()
+@PublicCache({ sMaxAge: 600, staleWhileRevalidate: 86400 })
 export class CitiesController {
   constructor(private readonly cities: CitiesService) {}
 

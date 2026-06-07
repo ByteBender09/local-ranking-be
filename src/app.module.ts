@@ -14,6 +14,7 @@ import { envValidationSchema } from './config/env.validation';
 import { ThrottleConfig, UploadConfig } from './config/configuration';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
+import { PublicCacheInterceptor } from './common/interceptors/public-cache.interceptor';
 import { HealthController } from './common/controllers/health.controller';
 import { IpThrottlerGuard } from './common/guards/ip-throttler.guard';
 import { BlockedReadOnlyGuard } from './common/guards/blocked-readonly.guard';
@@ -46,7 +47,7 @@ import { AiSearchModule } from './modules/ai-search/ai-search.module';
       validationSchema: envValidationSchema,
       cache: true,
     }),
-    CacheModule.register({ isGlobal: true, ttl: 60 * 1000, max: 5_000 }),
+    CacheModule.register({ isGlobal: true, ttl: 5 * 60 * 1000, max: 10_000 }),
     ScheduleModule.forRoot(),
     ServeStaticModule.forRootAsync({
       inject: [ConfigService],
@@ -131,6 +132,7 @@ import { AiSearchModule } from './modules/ai-search/ai-search.module';
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: BlockedReadOnlyGuard },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
+    { provide: APP_INTERCEPTOR, useClass: PublicCacheInterceptor },
     { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
   ],
 })

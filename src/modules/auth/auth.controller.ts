@@ -38,9 +38,10 @@ import {
 import { User } from '../../database/entities';
 
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const AUTH_PRESENT_COOKIE = 'auth_present';
 
 @Controller('auth')
-@Throttle({ auth: { ttl: 60_000, limit: 10 } })
+@Throttle({ auth: { ttl: 60_000, limit: 30 } })
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
@@ -162,6 +163,10 @@ export class AuthController {
   @HttpCode(204)
   logout(@Res({ passthrough: true }) res: Response): void {
     res.clearCookie(ACCESS_TOKEN_COOKIE, this.cookieOptions());
+    res.clearCookie(AUTH_PRESENT_COOKIE, {
+      ...this.cookieOptions(),
+      httpOnly: false,
+    });
   }
 
   @UseGuards(JwtAuthGuard)
@@ -211,6 +216,11 @@ export class AuthController {
   private setAccessCookie(res: Response, token: string): void {
     res.cookie(ACCESS_TOKEN_COOKIE, token, {
       ...this.cookieOptions(),
+      maxAge: ONE_WEEK_MS,
+    });
+    res.cookie(AUTH_PRESENT_COOKIE, '1', {
+      ...this.cookieOptions(),
+      httpOnly: false,
       maxAge: ONE_WEEK_MS,
     });
   }

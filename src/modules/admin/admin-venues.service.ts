@@ -19,7 +19,8 @@ import { UpdateCityDto } from './dto/update-city.dto';
 import { CitiesService } from '../cities/cities.service';
 import { WardNormalizerService } from '../venues/ward-normalizer.service';
 import { UploadCleanupService } from '../uploads/upload-cleanup.service';
-import { UploadIngestionService } from '../uploads/upload-ingestion.service';
+import { isOwnUrl } from '../uploads/upload-ingestion.service';
+import { VenueImageRehostQueue } from '../uploads/venue-image-rehost.queue';
 
 // Normalise a user-entered website into a stored value: trim, drop when empty,
 // and prepend https:// when the scheme is missing so the FE always gets a
@@ -30,6 +31,21 @@ function normalizeWebsite(input: string | undefined): string | null {
   if (!v) return null;
   const withScheme = /^https?:\/\//i.test(v) ? v : `https://${v}`;
   return withScheme.slice(0, 500);
+}
+
+function classifyImages(urls: string[]): {
+  cleaned: string[];
+  external: string[];
+} {
+  const cleaned: string[] = [];
+  const external: string[] = [];
+  for (const raw of urls ?? []) {
+    const url = (raw ?? '').trim();
+    if (!url) continue;
+    cleaned.push(url);
+    if (!isOwnUrl(url)) external.push(url);
+  }
+  return { cleaned, external };
 }
 
 const slugify = (s: string): string =>
@@ -50,7 +66,7 @@ export class AdminCitiesVenuesService {
     private readonly citiesService: CitiesService,
     private readonly wardNormalizer: WardNormalizerService,
     private readonly uploads: UploadCleanupService,
-    private readonly ingestion: UploadIngestionService,
+    private readonly rehostQueue: VenueImageRehostQueue,
   ) {}
 
   // Re-resolve ward_canonical from district + address. Called on create
@@ -190,7 +206,7 @@ export class AdminCitiesVenuesService {
     const baseSlug = `${slugify(dto.name)}-${city.slug}`;
     const slug = await this.uniqueSlug(baseSlug);
 
-    const ingested = await this.ingestion.sanitiseImages(dto.images ?? []);
+    const { cleaned, external } = classifyImages(dto.images ?? []);
 
     const venue = this.venues.create({
       slug,
@@ -201,7 +217,9 @@ export class AdminCitiesVenuesService {
       address: dto.address,
       description: dto.description,
       website: normalizeWebsite(dto.website),
-      images: ingested.images,
+      images: cleaned,
+      imageIngestionStatus:
+        external.length > 0 ? { pending: external, failed: [] } : null,
       tags: dto.tags,
       hours: dto.hours,
       priceRange: dto.priceRange,
@@ -214,8 +232,8 @@ export class AdminCitiesVenuesService {
     });
     await this.resolveWardFor(venue);
     const saved = await this.venues.save(venue);
-    // venueCount changed for this city — bust the listing cache.
     await this.citiesService.invalidateBySlug(city.slug);
+    if (external.length > 0) this.rehostQueue.enqueue(saved.id);
     return saved;
   }
 
@@ -237,9 +255,23 @@ export class AdminCitiesVenuesService {
     if (dto.description !== undefined) venue.description = dto.description;
     if (dto.website !== undefined)
       venue.website = normalizeWebsite(dto.website);
+    let newExternal: string[] = [];
     if (dto.images !== undefined) {
-      const ingested = await this.ingestion.sanitiseImages(dto.images);
-      venue.images = ingested.images;
+      const { cleaned, external } = classifyImages(dto.images);
+      venue.images = cleaned;
+      newExternal = external;
+      const prevPending = venue.imageIngestionStatus?.pending ?? [];
+      const prevFailed = venue.imageIngestionStatus?.failed ?? [];
+      const stillPending = prevPending.filter((u) => cleaned.includes(u));
+      const stillFailed = prevFailed.filter((u) => cleaned.includes(u));
+      const fresh = external.filter(
+        (u) => !stillPending.includes(u) && !stillFailed.includes(u),
+      );
+      const pending = [...stillPending, ...fresh];
+      venue.imageIngestionStatus =
+        pending.length === 0 && stillFailed.length === 0
+          ? null
+          : { pending, failed: stillFailed };
     }
     if (dto.tags !== undefined) venue.tags = dto.tags;
     if (dto.hours !== undefined) venue.hours = dto.hours;
@@ -258,6 +290,23 @@ export class AdminCitiesVenuesService {
     if (dto.images !== undefined) {
       await this.uploads.diffAndDelete(previousImages, saved.images);
     }
+    if (newExternal.length > 0) this.rehostQueue.enqueue(saved.id);
+    return saved;
+  }
+
+  async retryFailedImages(slug: string): Promise<Venue> {
+    const venue = await this.getVenue(slug);
+    const failed = venue.imageIngestionStatus?.failed ?? [];
+    if (failed.length === 0) return venue;
+    const pending = [
+      ...(venue.imageIngestionStatus?.pending ?? []),
+      ...failed.filter(
+        (u) => !(venue.imageIngestionStatus?.pending ?? []).includes(u),
+      ),
+    ];
+    venue.imageIngestionStatus = { pending, failed: [] };
+    const saved = await this.venues.save(venue);
+    this.rehostQueue.enqueue(saved.id);
     return saved;
   }
 

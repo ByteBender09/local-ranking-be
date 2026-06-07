@@ -96,4 +96,9 @@ export class AdminCitiesVenuesController {
   async deleteVenue(@Param('slug') slug: string): Promise<void> {
     await this.svc.deleteVenue(slug);
   }
+
+  @Post('venues/:slug/retry-images')
+  retryImages(@Param('slug') slug: string): Promise<Venue> {
+    return this.svc.retryFailedImages(slug);
+  }
 }

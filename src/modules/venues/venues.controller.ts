@@ -7,6 +7,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
+import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { PaginatedResponse } from '../../common/dto/pagination.dto';
 import { Venue } from '../../database/entities';
 import { ListVenuesDto } from './dto/list-venues.dto';
@@ -18,11 +19,13 @@ export class VenuesController {
   constructor(private readonly venues: VenuesService) {}
 
   @Get()
+  @PublicCache({ sMaxAge: 60, staleWhileRevalidate: 300 })
   list(@Query() filter: ListVenuesDto): Promise<PaginatedResponse<Venue>> {
     return this.venues.list(filter);
   }
 
   @Get('trending')
+  @PublicCache({ sMaxAge: 60, staleWhileRevalidate: 300 })
   trending(
     @Query('limit', new DefaultValuePipe(12), ParseIntPipe) limit: number,
   ): Promise<Venue[]> {
@@ -30,6 +33,7 @@ export class VenuesController {
   }
 
   @Get('search')
+  @PublicCache({ sMaxAge: 30, staleWhileRevalidate: 120 })
   search(
     @Query('q', new DefaultValuePipe('')) q: string,
     @Query('limit', new DefaultValuePipe(8), ParseIntPipe) limit: number,
@@ -53,6 +57,7 @@ export class VenuesController {
   // Total venue count per category for the category chips (real totals, not
   // just what's been rendered). Declared before ':slug'.
   @Get('category-counts')
+  @PublicCache({ sMaxAge: 600, staleWhileRevalidate: 86400 })
   categoryCounts(
     @Query('citySlug') citySlug?: string,
   ): Promise<Record<string, number>> {
@@ -63,6 +68,7 @@ export class VenuesController {
   // heavy columns) so the FE can list every venue, not just the first page.
   // Declared before ':slug' so the static path wins the route match.
   @Get('sitemap')
+  @PublicCache({ sMaxAge: 600, staleWhileRevalidate: 86400 })
   sitemap(): Promise<Array<{ slug: string; updatedAt: Date }>> {
     return this.venues.sitemapEntries();
   }
@@ -71,6 +77,7 @@ export class VenuesController {
   // includes the old district name(s) it covers so the chip can render
   // "Bến Thành (was Quận 1)". Declared before ':slug'.
   @Get('wards')
+  @PublicCache({ sMaxAge: 600, staleWhileRevalidate: 86400 })
   wards(
     @Query('citySlug') citySlug: string,
   ): Promise<Array<{ name: string; type: string; aliasesOldDistrict: string[] }>> {
@@ -78,6 +85,7 @@ export class VenuesController {
   }
 
   @Get(':slug')
+  @PublicCache({ sMaxAge: 300, staleWhileRevalidate: 3600 })
   bySlug(@Param('slug') slug: string): Promise<Venue> {
     return this.venues.getBySlug(slug);
   }

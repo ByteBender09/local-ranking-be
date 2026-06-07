@@ -19,6 +19,7 @@ import {
   CurrentUser,
 } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { CheckIn, User } from '../../database/entities';
 import { PublicUserDto } from './dto/public-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -39,6 +40,7 @@ export class UsersController {
   ) {}
 
   @Public()
+  @PublicCache({ sMaxAge: 300, staleWhileRevalidate: 600 })
   @Get('leaderboard')
   async leaderboard(
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
@@ -50,6 +52,7 @@ export class UsersController {
   }
 
   @Public()
+  @PublicCache({ sMaxAge: 300, staleWhileRevalidate: 600 })
   @Get('bookable')
   async bookable(
     @Query('limit', new DefaultValuePipe(12), ParseIntPipe) limit: number,
@@ -230,6 +233,7 @@ export class UsersController {
   // venue + city so the FE can render the same memory card shape used
   // in the journey timeline.
   @Public()
+  @PublicCache({ sMaxAge: 60, staleWhileRevalidate: 300 })
   @Get(':handle/check-ins')
   async publicCheckIns(
     @Param('handle') handle: string,

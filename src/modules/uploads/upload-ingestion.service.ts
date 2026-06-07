@@ -1,14 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
 import axios from 'axios';
+import { randomBytes } from 'crypto';
+import { existsSync, mkdirSync, promises as fs } from 'fs';
+import { join, resolve } from 'path';
 import sharp from 'sharp';
+import { UploadConfig } from '../../config/configuration';
 
-const FETCH_TIMEOUT_MS = 30_000;
+const FETCH_TIMEOUT_MS = 12_000;
 const MAX_BYTES = 16 * 1024 * 1024;
 
-// Vietnamese-CDN scrapers (mia.vn, vietnamtourism.gov.vn, etc.) tend to
-// 403/429 the default axios UA. Spoof a recent Chrome so downloads succeed.
 const BROWSER_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
@@ -22,7 +23,7 @@ const OWN_HOSTS = new Set(['localhost', '127.0.0.1']);
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function isOwnUrl(url: string): boolean {
+export function isOwnUrl(url: string): boolean {
   if (!url) return false;
   let host = '';
   let pathname = '';
@@ -44,69 +45,37 @@ function isOwnUrl(url: string): boolean {
 export class UploadIngestionService {
   private readonly logger = new Logger(UploadIngestionService.name);
 
-  constructor(
-    private readonly config: ConfigService,
-    private readonly jwt: JwtService,
-  ) {}
+  constructor(private readonly config: ConfigService) {}
 
   /**
-   * Downloads `url`, re-encodes to WebP, and uploads via the BE's own
-   * `/admin/uploads` HTTP endpoint. Going through HTTP guarantees the
-   * stored file and the returned URL always live on the same host —
-   * direct disk writes risked a mismatch when a dev BE was used against
-   * the prod DB (file landed locally, URL pointed at prod CDN → 404).
+   * Download → re-encode to WebP → write to local upload disk → return the
+   * canonical public URL. No self-HTTP — bypasses throttler, JWT guard, and
+   * the cost of a second inbound TLS/connection slot per image.
    */
   async ingestFromUrl(url: string): Promise<string> {
-    const backend = (process.env.BACKEND_PUBLIC_URL ?? '').replace(/\/$/, '');
-    if (!backend) {
-      throw new Error('BACKEND_PUBLIC_URL not configured');
+    const cfg = this.config.get<UploadConfig>('upload');
+    if (!cfg) throw new Error('upload config missing');
+    if (!cfg.publicUrl) {
+      throw new Error('UPLOAD_PUBLIC_URL not configured');
     }
 
     const downloaded = await this.downloadWithRetry(url);
-
     const webp = await sharp(Buffer.from(downloaded))
       .resize({ width: 1600, withoutEnlargement: true })
       .webp({ quality: 82 })
       .toBuffer();
 
-    const token = this.jwt.sign(
-      { sub: 'internal-ingest', handle: 'internal-ingest', role: 'admin' },
-      { expiresIn: '1m' },
-    );
+    const filename = `${Date.now().toString(36)}-${randomBytes(4).toString('hex')}.webp`;
+    const dir = resolve(cfg.diskPath);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    await fs.writeFile(join(dir, filename), webp);
 
-    const fd = new FormData();
-    fd.append(
-      'file',
-      new Blob([new Uint8Array(webp)], { type: 'image/webp' }),
-      'ingested.webp',
-    );
-    const res = await axios.post<{ data?: { url?: string }; url?: string }>(
-      `${backend}/admin/uploads`,
-      fd,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-        maxBodyLength: Infinity,
-        timeout: FETCH_TIMEOUT_MS,
-      },
-    );
-    const out = res.data?.data?.url ?? res.data?.url;
-    if (!out) throw new Error('upload returned no url');
-    return out;
+    return `${cfg.publicUrl.replace(/\/$/, '')}/uploads/${filename}`;
   }
 
-  // Single retry with Retry-After respect — covers transient 429/503 from
-  // public CDNs without burning the whole save on a hiccup.
   private async downloadWithRetry(url: string): Promise<ArrayBuffer> {
     try {
-      const res = await axios.get<ArrayBuffer>(url, {
-        responseType: 'arraybuffer',
-        timeout: FETCH_TIMEOUT_MS,
-        maxContentLength: MAX_BYTES,
-        maxBodyLength: MAX_BYTES,
-        headers: DOWNLOAD_HEADERS,
-        validateStatus: (s) => s >= 200 && s < 300,
-      });
-      return res.data;
+      return await this.download(url);
     } catch (e) {
       if (!axios.isAxiosError(e)) throw e;
       const status = e.response?.status;
@@ -117,50 +86,19 @@ export class UploadIngestionService {
           ? Math.min(retryAfter * 1000, 5000)
           : 1500;
       await sleep(waitMs);
-      const res = await axios.get<ArrayBuffer>(url, {
-        responseType: 'arraybuffer',
-        timeout: FETCH_TIMEOUT_MS,
-        maxContentLength: MAX_BYTES,
-        maxBodyLength: MAX_BYTES,
-        headers: DOWNLOAD_HEADERS,
-        validateStatus: (s) => s >= 200 && s < 300,
-      });
-      return res.data;
+      return this.download(url);
     }
   }
 
-  /**
-   * Walks `urls`, leaves own-domain URLs untouched, and re-hosts external
-   * ones via `ingestFromUrl`. Per-URL failures are swallowed: the failing
-   * URL is dropped from the result and the issue logged. Returns the
-   * sanitised list — owners can swap any missing asset later via the UI.
-   */
-  async sanitiseImages(urls: string[]): Promise<{
-    images: string[];
-    rehosted: number;
-    skipped: number;
-  }> {
-    const out: string[] = [];
-    let rehosted = 0;
-    let skipped = 0;
-    for (const raw of urls ?? []) {
-      const url = (raw ?? '').trim();
-      if (!url) continue;
-      if (isOwnUrl(url)) {
-        out.push(url);
-        continue;
-      }
-      try {
-        const hosted = await this.ingestFromUrl(url);
-        out.push(hosted);
-        rehosted += 1;
-      } catch (e) {
-        skipped += 1;
-        this.logger.warn(
-          `Skipped external image ${url}: ${e instanceof Error ? e.message : String(e)}`,
-        );
-      }
-    }
-    return { images: out, rehosted, skipped };
+  private async download(url: string): Promise<ArrayBuffer> {
+    const res = await axios.get<ArrayBuffer>(url, {
+      responseType: 'arraybuffer',
+      timeout: FETCH_TIMEOUT_MS,
+      maxContentLength: MAX_BYTES,
+      maxBodyLength: MAX_BYTES,
+      headers: DOWNLOAD_HEADERS,
+      validateStatus: (s) => s >= 200 && s < 300,
+    });
+    return res.data;
   }
 }

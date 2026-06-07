@@ -5,7 +5,7 @@ import { Cache } from 'cache-manager';
 import { Repository } from 'typeorm';
 import { City, Venue } from '../../database/entities';
 
-const CACHE_TTL_MS = 30 * 1000;
+const CACHE_TTL_MS = 5 * 60 * 1000;
 
 export type CityWithCount = City & { venueCount: number };
 

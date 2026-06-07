@@ -2,13 +2,16 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import cluster from 'cluster';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
+import { cpus } from 'os';
 import { json, urlencoded } from 'express';
 import helmet from 'helmet';
 import { types as pgTypes } from 'pg';
 import { AppModule } from './app.module';
 import { AppConfig, UploadConfig } from './config/configuration';
+import { VenueImageRehostQueue } from './modules/uploads/venue-image-rehost.queue';
 
 // `timestamp without time zone` columns (TypeORM's default for @CreateDateColumn)
 // store UTC, but node-postgres parses them in the SERVER process's local
@@ -78,7 +81,33 @@ async function bootstrap(): Promise<void> {
   app.enableShutdownHooks();
 
   await app.listen(appConfig.port);
-  Logger.log(`API ready at http://localhost:${appConfig.port}`, 'Bootstrap');
+  Logger.log(
+    `API ready at http://localhost:${appConfig.port}${cluster.isWorker ? ` (worker ${process.pid})` : ''}`,
+    'Bootstrap',
+  );
+
+  const isResumeWorker = !cluster.isWorker || cluster.worker?.id === 1;
+  if (isResumeWorker) {
+    void app.get(VenueImageRehostQueue).resume();
+  }
 }
 
-void bootstrap();
+function startCluster(): void {
+  const requested = parseInt(process.env.CLUSTER_WORKERS ?? '0', 10);
+  const workers = requested > 0 ? requested : Math.max(1, cpus().length - 1);
+  Logger.log(`Forking ${workers} worker(s)`, 'Cluster');
+  for (let i = 0; i < workers; i++) cluster.fork();
+  cluster.on('exit', (worker, code, signal) => {
+    Logger.warn(
+      `Worker ${worker.process.pid} died (code=${code} signal=${signal}) — respawning`,
+      'Cluster',
+    );
+    cluster.fork();
+  });
+}
+
+if (process.env.CLUSTER_MODE === 'true' && cluster.isPrimary) {
+  startCluster();
+} else {
+  void bootstrap();
+}

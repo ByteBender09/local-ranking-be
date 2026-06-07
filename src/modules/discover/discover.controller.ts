@@ -7,6 +7,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
+import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import {
   AuthenticatedUser,
@@ -20,6 +21,7 @@ export class DiscoverController {
   constructor(private readonly discover: DiscoverService) {}
 
   @Public()
+  @PublicCache({ sMaxAge: 300, staleWhileRevalidate: 600 })
   @Get('trending')
   trending(
     @Query('limit', new DefaultValuePipe(8), ParseIntPipe) limit: number,
@@ -30,6 +32,7 @@ export class DiscoverController {
 
   // Canonical name for the monthly favorite-delta ranking.
   @Public()
+  @PublicCache({ sMaxAge: 300, staleWhileRevalidate: 600 })
   @Get('community-favorites')
   communityFavorites(
     @Query('limit', new DefaultValuePipe(8), ParseIntPipe) limit: number,
@@ -40,6 +43,7 @@ export class DiscoverController {
 
   // Backward-compatible alias → community favorites.
   @Public()
+  @PublicCache({ sMaxAge: 300, staleWhileRevalidate: 600 })
   @Get('recently-liked')
   recentlyLiked(
     @Query('limit', new DefaultValuePipe(8), ParseIntPipe) limit: number,
@@ -49,6 +53,7 @@ export class DiscoverController {
   }
 
   @Public()
+  @PublicCache({ sMaxAge: 300, staleWhileRevalidate: 600 })
   @Get('editors-pick')
   editorsPick(
     @Query('limit', new DefaultValuePipe(8), ParseIntPipe) limit: number,
@@ -58,6 +63,7 @@ export class DiscoverController {
   }
 
   @Public()
+  @PublicCache({ sMaxAge: 300, staleWhileRevalidate: 600 })
   @Get('hidden-gems')
   hiddenGems(
     @Query('limit', new DefaultValuePipe(8), ParseIntPipe) limit: number,

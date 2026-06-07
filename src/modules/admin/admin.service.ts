@@ -1,5 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { Cache } from 'cache-manager';
 import { Repository } from 'typeorm';
 import {
   CheckIn,
@@ -9,6 +11,9 @@ import {
   Venue,
   Vote,
 } from '../../database/entities';
+
+const OVERVIEW_CACHE_KEY = 'admin:overview';
+const OVERVIEW_CACHE_TTL_MS = 60 * 1000;
 
 export interface AdminOverview {
   users: {
@@ -49,9 +54,18 @@ export class AdminService {
     @InjectRepository(Review) private readonly reviews: Repository<Review>,
     @InjectRepository(Vote) private readonly votes: Repository<Vote>,
     @InjectRepository(CheckIn) private readonly checkIns: Repository<CheckIn>,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
   async overview(): Promise<AdminOverview> {
+    const cached = await this.cache.get<AdminOverview>(OVERVIEW_CACHE_KEY);
+    if (cached) return cached;
+    const fresh = await this.computeOverview();
+    await this.cache.set(OVERVIEW_CACHE_KEY, fresh, OVERVIEW_CACHE_TTL_MS);
+    return fresh;
+  }
+
+  private async computeOverview(): Promise<AdminOverview> {
     const [
       userTotal,
       userAdmins,
