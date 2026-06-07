@@ -233,6 +233,7 @@ export class AuthController {
       secure: isProd,
       sameSite: isProd ? ('lax' as const) : ('lax' as const),
       path: '/',
+      domain: isProd ? '.homnaydidau.xyz' : undefined,
     };
   }
 }
