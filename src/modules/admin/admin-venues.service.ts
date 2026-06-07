@@ -19,6 +19,7 @@ import { UpdateCityDto } from './dto/update-city.dto';
 import { CitiesService } from '../cities/cities.service';
 import { WardNormalizerService } from '../venues/ward-normalizer.service';
 import { UploadCleanupService } from '../uploads/upload-cleanup.service';
+import { UploadIngestionService } from '../uploads/upload-ingestion.service';
 
 // Normalise a user-entered website into a stored value: trim, drop when empty,
 // and prepend https:// when the scheme is missing so the FE always gets a
@@ -49,6 +50,7 @@ export class AdminCitiesVenuesService {
     private readonly citiesService: CitiesService,
     private readonly wardNormalizer: WardNormalizerService,
     private readonly uploads: UploadCleanupService,
+    private readonly ingestion: UploadIngestionService,
   ) {}
 
   // Re-resolve ward_canonical from district + address. Called on create
@@ -188,6 +190,8 @@ export class AdminCitiesVenuesService {
     const baseSlug = `${slugify(dto.name)}-${city.slug}`;
     const slug = await this.uniqueSlug(baseSlug);
 
+    const ingested = await this.ingestion.sanitiseImages(dto.images ?? []);
+
     const venue = this.venues.create({
       slug,
       name: dto.name,
@@ -197,7 +201,7 @@ export class AdminCitiesVenuesService {
       address: dto.address,
       description: dto.description,
       website: normalizeWebsite(dto.website),
-      images: dto.images,
+      images: ingested.images,
       tags: dto.tags,
       hours: dto.hours,
       priceRange: dto.priceRange,
@@ -233,7 +237,10 @@ export class AdminCitiesVenuesService {
     if (dto.description !== undefined) venue.description = dto.description;
     if (dto.website !== undefined)
       venue.website = normalizeWebsite(dto.website);
-    if (dto.images !== undefined) venue.images = dto.images;
+    if (dto.images !== undefined) {
+      const ingested = await this.ingestion.sanitiseImages(dto.images);
+      venue.images = ingested.images;
+    }
     if (dto.tags !== undefined) venue.tags = dto.tags;
     if (dto.hours !== undefined) venue.hours = dto.hours;
     if (dto.priceRange !== undefined) venue.priceRange = dto.priceRange;
