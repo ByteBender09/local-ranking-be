@@ -9,11 +9,9 @@ import { AiRerankerService } from './ai-reranker.service';
 import { bayesianScoreExpr } from '../venues/ranking';
 import type { AiSearchResponse, ParsedIntent } from './types';
 
-// Default cap on returned venues. Most queries don't specify a count; this
-// number balances "feels generous" with "fits the LLM reranker token budget".
 const DEFAULT_RESULT_COUNT = 12;
-// Hard ceiling so a malicious "top 99999" request can't blow up the DB.
 const MAX_RESULT_COUNT = 30;
+const CANDIDATE_POOL_CAP = 120;
 
 // Rerank now fires on EVERY query that has at least 3 candidates. The old
 // behavior (only fire when vibe_tags / audience / timeOfDay was set)
@@ -59,16 +57,19 @@ export class AiSearchService {
       ? `[city:${opts.currentCitySlug}] ${query}`
       : query;
 
-    // ─── Cache hit ────────────────────────────────────────────────
     const cached = await this.cache.get(cacheQuery);
     if (cached) {
-      const venues = await this.hydrateByIds(cached.venueIds);
+      const topK = clampResultCount(cached.intent.resultCount);
+      const firstPageIds = cached.venueIds.slice(0, topK);
+      const venues = await this.hydrateByIds(firstPageIds);
       return {
         query,
         intent: cached.intent,
         venues,
         intro: cached.intro,
         source: 'cache',
+        searchId: this.cache.key(cacheQuery),
+        totalMatched: cached.venueIds.length,
       };
     }
 
@@ -125,24 +126,43 @@ export class AiSearchService {
       return { ...fallback, intent };
     }
 
-    // ─── Always-on rerank (intro consistency) ─────────────────────
+    // Rerank uses a smaller window (cost). The wider candidate pool is kept
+    // around for pagination — user-visible "load more" reveals the rest in
+    // filter order, no extra LLM cost.
+    const topK = clampResultCount(intent.resultCount);
+    const rerankWindow = candidates.slice(0, 30);
+
     let orderedIds: string[];
     let intro: string | null = null;
     let usedReranker = false;
-    const topK = clampResultCount(intent.resultCount);
 
-    const rerankResult = await this.reranker.rerank(query, intent, candidates, topK);
+    const rerankResult = await this.reranker.rerank(
+      query,
+      intent,
+      rerankWindow,
+      topK,
+    );
     if (rerankResult) {
-      orderedIds = rerankResult.orderedVenueIds.slice(0, topK);
+      const rerankedSet = new Set(rerankResult.orderedVenueIds);
+      const tail = candidates
+        .filter((c) => !rerankedSet.has(c.id))
+        .map((c) => c.id);
+      orderedIds = [...rerankResult.orderedVenueIds, ...tail];
       intro = rerankResult.intro;
       usedReranker = true;
     } else {
-      // Reranker failed or fewer than 3 candidates — keep filter order,
-      // no intro. The FE still renders the cards.
-      orderedIds = candidates.slice(0, topK).map((v) => v.id);
+      orderedIds = candidates.map((v) => v.id);
     }
 
-    // ─── Cache + return ───────────────────────────────────────────
+    // When user asked for an explicit count ("20 quán"), cap the pool to that
+    // number — the FE then shows no "load more" past their target.
+    if (intent.resultCount !== null && intent.resultCount > 0) {
+      orderedIds = orderedIds.slice(
+        0,
+        Math.min(intent.resultCount, MAX_RESULT_COUNT * 4),
+      );
+    }
+
     await this.cache.set(cacheQuery, {
       intent,
       venueIds: orderedIds,
@@ -150,8 +170,39 @@ export class AiSearchService {
       usedReranker,
     });
 
-    const venues = await this.hydrateByIds(orderedIds);
-    return { query, intent, venues, intro, source: 'fresh' };
+    const firstPageIds = orderedIds.slice(0, topK);
+    const venues = await this.hydrateByIds(firstPageIds);
+    return {
+      query,
+      intent,
+      venues,
+      intro,
+      source: 'fresh',
+      searchId: this.cache.key(cacheQuery),
+      totalMatched: orderedIds.length,
+    };
+  }
+
+  async more(
+    rawQuery: string,
+    opts: {
+      currentCitySlug?: string;
+      offset: number;
+      limit: number;
+    },
+  ): Promise<{ venues: Venue[]; totalMatched: number }> {
+    const query = rawQuery.trim();
+    if (!query) return { venues: [], totalMatched: 0 };
+    const cacheQuery = opts.currentCitySlug
+      ? `[city:${opts.currentCitySlug}] ${query}`
+      : query;
+    const cached = await this.cache.get(cacheQuery);
+    if (!cached) return { venues: [], totalMatched: 0 };
+    const limit = Math.min(Math.max(opts.limit, 1), 24);
+    const offset = Math.max(opts.offset, 0);
+    const pageIds = cached.venueIds.slice(offset, offset + limit);
+    const venues = await this.hydrateByIds(pageIds);
+    return { venues, totalMatched: cached.venueIds.length };
   }
 
   // Filter against the venues table using whatever fields the parser
@@ -175,6 +226,9 @@ export class AiSearchService {
 
     if (intent.priceMax !== null) {
       qb.andWhere('venue.price_range <= :pmax', { pmax: intent.priceMax });
+    }
+    if (intent.priceMin !== null) {
+      qb.andWhere('venue.price_range >= :pmin', { pmin: intent.priceMin });
     }
     if (intent.ratingMin !== null) {
       qb.andWhere('venue.rating >= :rmin', { rmin: intent.ratingMin });
@@ -227,9 +281,7 @@ export class AiSearchService {
     }
     qb.addOrderBy('venue.id', 'ASC');
 
-    // Always fetch a wider pool than needed so the reranker has options.
-    // 30 covers the topK ceiling and gives the reranker room to choose.
-    qb.take(30);
+    qb.take(CANDIDATE_POOL_CAP);
     return qb.getMany();
   }
 
@@ -305,6 +357,7 @@ function buildShortcutUrl(intent: ParsedIntent): string | null {
   if (intent.nearLandmark !== null) return null;
   if (intent.wardQuery !== null) return null;
   if (intent.priceMax !== null) return null;
+  if (intent.priceMin !== null) return null;
   if (intent.ratingMin !== null) return null;
   if (intent.durationDays !== null && intent.durationDays > 0) return null;
 

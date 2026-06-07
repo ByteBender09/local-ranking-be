@@ -72,6 +72,7 @@ const SEARCH_TOOL = {
         },
         cuisine: { type: ['string', 'null'] },
         price_max: { type: ['integer', 'null'], minimum: 1, maximum: 4 },
+        price_min: { type: ['integer', 'null'], minimum: 1, maximum: 4 },
         rating_min: { type: ['number', 'null'], minimum: 0, maximum: 5 },
         open_now: { type: 'boolean' },
         vibe_tags: { type: 'array', items: { type: 'string' } },
@@ -107,6 +108,7 @@ const SEARCH_TOOL = {
         'categories',
         'cuisine',
         'price_max',
+        'price_min',
         'rating_min',
         'open_now',
         'vibe_tags',
@@ -151,10 +153,17 @@ ABSOLUTE RULES:
    - "lăng tẩm"/"đền chùa"/"di tích" / "temple"/"shrine"/"historic site" → ["museum"]
    - "bãi biển"/"biển" / "beach" → ["beach"]
    - "homestay"/"hostel"/"airbnb" → ["homestay"]
-7. Price mapping:
-   - "rẻ"/"bình dân"/"sinh viên" / "cheap"/"budget"/"affordable" → price_max=2
-   - "tầm trung" / "mid-range" → price_max=3
-   - "sang chảnh"/"đắt"/"luxury" / "high-end"/"fancy"/"expensive" → price_max=4
+   - "nghệ thuật"/"art"/"artsy"/"artistic"/"nghệ sĩ"/"sáng tạo"/"sống ảo nghệ thuật"
+     / "gallery"/"creative" → ["viewpoint","museum"]
+   - "bảo tàng"/"triển lãm" / "museum"/"exhibition" → ["museum"]
+   - "view đẹp"/"ngắm cảnh"/"check-in cảnh" / "scenic"/"viewpoint"/"lookout" → ["viewpoint"]
+7. Price mapping (use price_min for "expensive only", price_max for "cheap or under"):
+   - "rẻ"/"bình dân"/"sinh viên" / "cheap"/"budget"/"affordable" → price_max=2, price_min=null
+   - "tầm trung" / "mid-range"/"moderate" → price_min=2, price_max=3
+   - "sang chảnh"/"đắt"/"đắt tiền"/"cao cấp" / "luxury"/"high-end"/"fancy"/"expensive"/"upscale"
+     → price_min=3, price_max=null
+   - "siêu rẻ"/"dirt cheap" → price_max=1
+   - "siêu sang"/"ultra luxury" → price_min=4
 8. Vibe (free-form array, language as user wrote it):
    - Vietnamese: "chilling", "yên tĩnh", "sống ảo", "lãng mạn", "sôi động", "view đẹp",
      "rooftop", "có sân vườn", "có view biển"
@@ -195,6 +204,7 @@ function toIntent(raw: Record<string, unknown>): ParsedIntent {
     categories: (raw.categories as ParsedIntent['categories']) ?? [],
     cuisine: (raw.cuisine as string | null) ?? null,
     priceMax: (raw.price_max as ParsedIntent['priceMax']) ?? null,
+    priceMin: (raw.price_min as ParsedIntent['priceMin']) ?? null,
     ratingMin: (raw.rating_min as number | null) ?? null,
     openNow: (raw.open_now as boolean) ?? false,
     vibeTags: (raw.vibe_tags as string[]) ?? [],

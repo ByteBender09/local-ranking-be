@@ -1,7 +1,8 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { AiSearchRequestDto } from './dto/ai-search.dto';
+import { AiSearchMoreDto, AiSearchRequestDto } from './dto/ai-search.dto';
 import { AiSearchService } from './ai-search.service';
+import type { Venue } from '../../database/entities';
 import type { AiSearchResponse } from './types';
 
 // AI search is GATED behind login. The JwtAuthGuard registered globally
@@ -22,5 +23,16 @@ export class AiSearchController {
   @Throttle({ ai: { ttl: 60_000, limit: 8 } })
   async search(@Body() dto: AiSearchRequestDto): Promise<AiSearchResponse> {
     return this.ai.search(dto.query, { currentCitySlug: dto.currentCitySlug });
+  }
+
+  @Post('search/more')
+  async more(
+    @Body() dto: AiSearchMoreDto,
+  ): Promise<{ venues: Venue[]; totalMatched: number }> {
+    return this.ai.more(dto.query, {
+      currentCitySlug: dto.currentCitySlug,
+      offset: dto.offset,
+      limit: dto.limit,
+    });
   }
 }

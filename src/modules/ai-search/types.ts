@@ -13,6 +13,7 @@ export interface ParsedIntent {
   categories: Category[];
   cuisine: string | null;
   priceMax: 1 | 2 | 3 | 4 | null;
+  priceMin: 1 | 2 | 3 | 4 | null;
   ratingMin: number | null;
   openNow: boolean;
   vibeTags: string[];
@@ -45,4 +46,9 @@ export interface AiSearchResponse {
   // listing page gives a better UX (pagination, persistent filter)
   // than the AI result list for that shape.
   redirectTo?: string;
+  // Pagination cursor: when totalMatched > venues.length the FE can
+  // POST /ai/search/more with `searchId` + `offset` to fetch additional
+  // matching candidates (filter order, no rerank cost).
+  searchId?: string;
+  totalMatched?: number;
 }
