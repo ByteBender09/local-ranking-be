@@ -91,6 +91,13 @@ export class UsersController {
     return this.users.updateProfile(user.id, body);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Delete('me')
+  @HttpCode(204)
+  async deleteMe(@CurrentUser() user: AuthenticatedUser): Promise<void> {
+    await this.users.deleteAccount(user.id);
+  }
+
   // Global user search for the @-mention dropdown. Auth optional — when
   // signed-in the caller is excluded from results and each row is
   // annotated with `isFollowing`. Capped at 25.

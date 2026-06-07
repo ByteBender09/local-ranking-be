@@ -317,10 +317,12 @@ export class UsersService {
     return users.map((u) => ({ user: u, isFollowing: set.has(u.id) }));
   }
 
-  // Used by leaderboard / profile-rank queries that already loaded a User
-  // row but want to enrich with isFollowing for the current viewer.
   async followingFlag(viewerId: string | undefined, targetId: string) {
     if (!viewerId) return false;
     return this.isFollowing(viewerId, targetId);
+  }
+
+  async deleteAccount(userId: string): Promise<void> {
+    await this.users.softDelete({ id: userId });
   }
 }
