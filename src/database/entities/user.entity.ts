@@ -81,6 +81,12 @@ export class User {
   @Column({ type: 'int', name: 'follower_count', default: 0 })
   followerCount: number;
 
+  // Number of OTHER users this user follows. Denormalised counter kept in
+  // sync inside the follow/unfollow transaction (mirror of follower_count).
+  // Exposed via PublicUserDto + Me so profile UIs can show "X following".
+  @Column({ type: 'int', name: 'following_count', default: 0 })
+  followingCount: number;
+
   @Column({ type: 'boolean', name: 'booking_enabled', default: false })
   bookingEnabled: boolean;
 

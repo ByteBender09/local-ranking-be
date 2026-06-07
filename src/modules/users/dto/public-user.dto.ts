@@ -12,6 +12,7 @@ export class PublicUserDto {
   citySlug: string | null;
   checkInCount: number;
   followerCount: number;
+  followingCount: number;
   role: UserRole;
   socials: UserSocials;
   bookingEnabled: boolean;
@@ -32,6 +33,7 @@ export class PublicUserDto {
       citySlug: user.citySlug,
       checkInCount: user.checkInCount,
       followerCount: user.followerCount,
+      followingCount: user.followingCount,
       role: user.role,
       socials: user.socials,
       bookingEnabled: user.bookingEnabled,

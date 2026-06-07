@@ -148,13 +148,29 @@ export class CheckInsService {
       }
 
       const now = new Date();
+
+      // Privacy toggle is intentionally exempt from the 30-minute lock —
+      // users should always be able to retract a public memory regardless
+      // of how old it is. We detect "privacy-only" by checking that no
+      // content-bearing field is being patched.
+      const isPrivacyOnly =
+        patch.isPublic !== undefined &&
+        patch.comment === undefined &&
+        patch.photos === undefined &&
+        patch.friends === undefined;
+
       if (ci.memoryCreatedAt) {
-        if (now.getTime() - ci.memoryCreatedAt.getTime() > MEMORY_LOCK_MS) {
+        if (
+          !isPrivacyOnly &&
+          now.getTime() - ci.memoryCreatedAt.getTime() > MEMORY_LOCK_MS
+        ) {
           throw new ForbiddenException(
             'Kỉ niệm đã được khóa sau 30 phút và không thể chỉnh sửa.',
           );
         }
-      } else {
+      } else if (!isPrivacyOnly) {
+        // First content write stamps the lock timer. A privacy-only toggle
+        // on a row with no memory yet shouldn't start the clock.
         ci.memoryCreatedAt = now;
       }
 

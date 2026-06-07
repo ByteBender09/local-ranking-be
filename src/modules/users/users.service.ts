@@ -130,6 +130,7 @@ export class UsersService {
         throw e;
       }
       await mgr.increment(User, { id: target.id }, 'followerCount', 1);
+      await mgr.increment(User, { id: followerId }, 'followingCount', 1);
     });
   }
 
@@ -149,6 +150,7 @@ export class UsersService {
       // honest across double-clicks / replayed requests.
       if ((res.affected ?? 0) > 0) {
         await mgr.decrement(User, { id: target.id }, 'followerCount', 1);
+        await mgr.decrement(User, { id: followerId }, 'followingCount', 1);
       }
     });
   }
