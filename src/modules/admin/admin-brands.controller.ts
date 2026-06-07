@@ -25,6 +25,7 @@ import {
   ListAdminBrandsDto,
   UpdateAdminBrandDto,
 } from './dto/admin-brand.dto';
+import { UploadCleanupService } from '../uploads/upload-cleanup.service';
 
 // Brand row + how many tours reference it.
 export interface AdminBrandRow {
@@ -48,6 +49,7 @@ export class AdminBrandsController {
   constructor(
     @InjectRepository(Brand) private readonly brands: Repository<Brand>,
     @InjectRepository(Tour) private readonly tours: Repository<Tour>,
+    private readonly uploads: UploadCleanupService,
   ) {}
 
   @Get('brands')
@@ -106,6 +108,7 @@ export class AdminBrandsController {
   ): Promise<Brand> {
     const b = await this.brands.findOne({ where: { id } });
     if (!b) throw new NotFoundException('Brand not found');
+    const previousLogo = b.logoUrl;
     if (dto.name !== undefined) b.name = dto.name;
     if (dto.shortName !== undefined) b.shortName = dto.shortName;
     if (dto.logoUrl !== undefined) b.logoUrl = dto.logoUrl || null;
@@ -115,6 +118,11 @@ export class AdminBrandsController {
       b.contactEmail = dto.contactEmail ? dto.contactEmail.toLowerCase() : null;
     const saved = await this.brands.save(b);
     await this.syncTourProviders(saved);
+    // Unlink the prior logo when it's been replaced or cleared. Runs
+    // after save commits — a rollback leaves the file in place.
+    if (dto.logoUrl !== undefined) {
+      await this.uploads.replaceAndDelete(previousLogo, saved.logoUrl);
+    }
     return saved;
   }
 
@@ -140,14 +148,15 @@ export class AdminBrandsController {
     return saved;
   }
 
+  // Soft-delete a brand: the row stays in the DB (and the logo file
+  // stays on disk) so an undelete restores it cleanly. Tours that
+  // referenced this brand fall back to the site-default provider in
+  // their denormalised `provider` JSON — same UX as before.
   @Delete('brands/:id')
   @HttpCode(204)
   async remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     const b = await this.brands.findOne({ where: { id } });
     if (!b) throw new NotFoundException('Brand not found');
-    // Tours keep existing but become system-managed: FK sets brand_id NULL;
-    // re-stamp their denormalised provider to the site default so cards don't
-    // show a deleted brand.
     await this.tours
       .createQueryBuilder()
       .update(Tour)
@@ -161,7 +170,7 @@ export class AdminBrandsController {
       })
       .where('brand_id = :id', { id })
       .execute();
-    await this.brands.delete({ id });
+    await this.brands.softDelete({ id });
   }
 
   private toRow(b: Brand, tourCount: number): AdminBrandRow {

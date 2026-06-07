@@ -79,13 +79,17 @@ export class CreateTourDto {
   @ArrayMaxSize(20)
   @IsString({ each: true })
   highlights?: string[];
-
 }
 
 export class UpdateTourDto {
   @IsOptional() @IsString() @MaxLength(200) title?: string;
   @IsOptional() @IsIn(CATEGORIES) category?: Category;
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(720) durationHours?: number;
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(720)
+  durationHours?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) priceVnd?: number;
   @IsOptional() @IsString() @MaxLength(500) image?: string;
 

@@ -1,6 +1,7 @@
 import {
   Column,
   CreateDateColumn,
+  DeleteDateColumn,
   Entity,
   Index,
   JoinColumn,
@@ -94,7 +95,7 @@ export class Tour {
   image: string;
 
   // Photo gallery — shown in the tour detail modal. Empty array is fine.
-  @Column({ type: 'text', array: true, default: () => "ARRAY[]::text[]" })
+  @Column({ type: 'text', array: true, default: () => 'ARRAY[]::text[]' })
   images: string[];
 
   @Column({
@@ -109,7 +110,7 @@ export class Tour {
   @Column({ type: 'int', name: 'review_count', default: 0 })
   reviewCount: number;
 
-  @Column({ type: 'text', array: true, default: () => "ARRAY[]::text[]" })
+  @Column({ type: 'text', array: true, default: () => 'ARRAY[]::text[]' })
   highlights: string[];
 
   @Column({ type: 'jsonb' })
@@ -131,7 +132,7 @@ export class Tour {
     type: 'uuid',
     array: true,
     name: 'venue_ids',
-    default: () => "ARRAY[]::uuid[]",
+    default: () => 'ARRAY[]::uuid[]',
   })
   venueIds: string[];
 
@@ -168,4 +169,10 @@ export class Tour {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  // Soft delete — softRemove() sets this. Cover image + gallery are kept
+  // on disk so the tour can be restored; only images explicitly dropped
+  // via the tour editor get unlinked.
+  @DeleteDateColumn({ name: 'deleted_at' })
+  deletedAt: Date | null;
 }

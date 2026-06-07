@@ -1,6 +1,7 @@
 import {
   Column,
   CreateDateColumn,
+  DeleteDateColumn,
   Entity,
   Index,
   PrimaryGeneratedColumn,
@@ -52,4 +53,10 @@ export class Brand {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  // Soft delete — softRemove() sets this. The brand's logo file is kept
+  // on disk so an undelete restores it cleanly; only replacing the logo
+  // via an update unlinks the prior file.
+  @DeleteDateColumn({ name: 'deleted_at' })
+  deletedAt: Date | null;
 }

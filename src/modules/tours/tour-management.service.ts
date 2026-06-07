@@ -22,6 +22,7 @@ import {
   UpsertPromotionDto,
 } from './dto/tour-management.dto';
 import { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
+import { UploadCleanupService } from '../uploads/upload-cleanup.service';
 
 // Provider stamped on system-managed tours (no brand owner).
 const SITE_PROVIDER = {
@@ -59,13 +60,18 @@ export class TourManagementService {
     @InjectRepository(City) private readonly cities: Repository<City>,
     @InjectRepository(Venue) private readonly venues: Repository<Venue>,
     @InjectRepository(Brand) private readonly brands: Repository<Brand>,
+    private readonly uploads: UploadCleanupService,
   ) {}
 
   // Admin-only management: list every tour (newest first) with its itinerary
   // and brand for the admin tour table.
   listAll(): Promise<Tour[]> {
     return this.tours.find({
-      relations: { city: true, brand: true, stops: { city: true, venue: true } },
+      relations: {
+        city: true,
+        brand: true,
+        stops: { city: true, venue: true },
+      },
       order: { createdAt: 'DESC' },
     });
   }
@@ -202,6 +208,13 @@ export class TourManagementService {
     void actor; // management is admin-only (enforced by the controller guard)
     const tour = await this.getTour(tourId);
 
+    // Snapshot the image fields BEFORE mutating so we can diff after the
+    // save commits. The gallery and the cover image are handled separately
+    // — a swap of the gallery may or may not update the cover depending
+    // on whether the caller passes `image` too.
+    const previousImages = tour.images;
+    const previousCover = tour.image;
+
     // Reassign the providing brand — re-stamp the denormalised provider so
     // cards show the new brand.
     if (dto.brandId !== undefined) {
@@ -236,13 +249,30 @@ export class TourManagementService {
     if (dto.highlights !== undefined) tour.highlights = dto.highlights;
     if (dto.isPublished !== undefined) tour.isPublished = dto.isPublished;
 
-    return this.tours.save(tour);
+    const saved = await this.tours.save(tour);
+
+    // Cleanup after commit: diff the gallery, then handle the cover. If
+    // the cover was just renormalised from the gallery (no explicit
+    // `image` patch) it's already inside one of the arrays we diffed,
+    // so we skip the cover replace to avoid a double-delete attempt.
+    if (dto.images !== undefined) {
+      await this.uploads.diffAndDelete(previousImages, saved.images);
+    }
+    if (dto.image !== undefined) {
+      const stillInGallery = saved.images.includes(previousCover);
+      if (!stillInGallery) {
+        await this.uploads.replaceAndDelete(previousCover, saved.image);
+      }
+    }
+    return saved;
   }
 
+  // Soft delete: row + image files stay so the tour can be restored.
+  // Image cleanup only happens via `update()` diffs.
   async remove(actor: AuthenticatedUser, tourId: string): Promise<void> {
     void actor; // admin-only management — no per-owner check
     const tour = await this.getTour(tourId);
-    await this.tours.delete({ id: tour.id });
+    await this.tours.softDelete({ id: tour.id });
   }
 
   async addPromotion(
@@ -271,7 +301,11 @@ export class TourManagementService {
     const tour = await this.getTour(tourId);
     const idx = tour.promotions.findIndex((p) => p.id === promotionId);
     if (idx < 0) throw new NotFoundException('Promotion not found');
-    const next: TourPromotion = { ...tour.promotions[idx], ...dto, id: promotionId };
+    const next: TourPromotion = {
+      ...tour.promotions[idx],
+      ...dto,
+      id: promotionId,
+    };
     tour.promotions = tour.promotions.map((p, i) => (i === idx ? next : p));
     await this.tours.save(tour);
     return next;

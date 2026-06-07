@@ -33,6 +33,7 @@
     "import:apify": "ts-node -r tsconfig-paths/register src/database/import-apify.ts",
     "import:landmarks": "ts-node -r tsconfig-paths/register src/database/import-landmarks.ts",
     "import:pisomap": "ts-node -r tsconfig-paths/register src/database/import-pisomap.ts",
+    "refresh:pisomap": "ts-node -r tsconfig-paths/register src/database/refresh-pisomap.ts",
     "diag:apify": "ts-node -r tsconfig-paths/register src/database/_diag-apify.ts",
     "predeploy": "npm run build && npm run migration:run",
     "start:prod:full": "npm run migration:run && node dist/main"

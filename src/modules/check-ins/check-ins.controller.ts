@@ -4,19 +4,28 @@ import {
   Delete,
   Get,
   HttpCode,
+  NotFoundException,
   Param,
   Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt.guard';
 import {
   AuthenticatedUser,
   CurrentUser,
 } from '../../common/decorators/current-user.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 import { CheckIn } from '../../database/entities';
 import { CreateCheckInDto, UpdateMemoryDto } from './dto/check-in.dto';
 import { CheckInsService } from './check-ins.service';
+import { PublicUserDto } from '../users/dto/public-user.dto';
+
+// Shape returned by GET check-ins/:id. Same as a CheckIn entity but with
+// the author replaced by the public-safe DTO so private fields (email,
+// access tokens, etc.) never leak through the public memory route.
+type PublicCheckInDto = Omit<CheckIn, 'user'> & { user: PublicUserDto };
 
 @Controller()
 @UseGuards(JwtAuthGuard)
@@ -26,6 +35,25 @@ export class CheckInsController {
   @Get('me/check-ins')
   myCheckIns(@CurrentUser() user: AuthenticatedUser): Promise<CheckIn[]> {
     return this.service.listByUser(user.id);
+  }
+
+  // Single-memory lookup powering the web's /m/[id] share page. Public to
+  // anonymous callers; OptionalJwtAuthGuard populates req.user when a JWT
+  // cookie IS present so an author can view their own private memory. The
+  // service returns null for both "not found" and "private + not owner";
+  // we map both to 404 so existence never leaks.
+  @Public()
+  @UseGuards(OptionalJwtAuthGuard)
+  @Get('check-ins/:id')
+  async byId(
+    @Param('id') id: string,
+    @CurrentUser() viewer: AuthenticatedUser | undefined,
+  ): Promise<PublicCheckInDto> {
+    const ci = await this.service.findByIdForViewer(id, viewer?.id);
+    if (!ci) throw new NotFoundException('Memory not found');
+    // Strip sensitive User columns before exposing the author publicly.
+    const { user, ...rest } = ci;
+    return { ...rest, user: PublicUserDto.from(user) };
   }
 
   @Post('venues/slug/:slug/check-in')

@@ -34,7 +34,12 @@ export class Review {
   @JoinColumn({ name: 'user_id' })
   user: User;
 
-  @Column({ type: 'numeric', precision: 2, scale: 1, transformer: numericToNumber })
+  @Column({
+    type: 'numeric',
+    precision: 2,
+    scale: 1,
+    transformer: numericToNumber,
+  })
   rating: number;
 
   @Column({ type: 'text' })

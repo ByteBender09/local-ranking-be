@@ -18,6 +18,7 @@ import {
 import { UpdateCityDto } from './dto/update-city.dto';
 import { CitiesService } from '../cities/cities.service';
 import { WardNormalizerService } from '../venues/ward-normalizer.service';
+import { UploadCleanupService } from '../uploads/upload-cleanup.service';
 
 // Normalise a user-entered website into a stored value: trim, drop when empty,
 // and prepend https:// when the scheme is missing so the FE always gets a
@@ -47,6 +48,7 @@ export class AdminCitiesVenuesService {
     @InjectRepository(Venue) private readonly venues: Repository<Venue>,
     private readonly citiesService: CitiesService,
     private readonly wardNormalizer: WardNormalizerService,
+    private readonly uploads: UploadCleanupService,
   ) {}
 
   // Re-resolve ward_canonical from district + address. Called on create
@@ -215,6 +217,10 @@ export class AdminCitiesVenuesService {
 
   async updateVenue(slug: string, dto: UpdateAdminVenueDto): Promise<Venue> {
     const venue = await this.getVenue(slug);
+    // Snapshot the prior image list before mutating — `diffAndDelete` runs
+    // after the DB save commits so a rolled-back update never unlinks
+    // files the venue still references.
+    const previousImages = venue.images;
     if (dto.cityId !== undefined) {
       const city = await this.cities.findOne({ where: { id: dto.cityId } });
       if (!city) throw new BadRequestException('City does not exist');
@@ -225,7 +231,8 @@ export class AdminCitiesVenuesService {
     if (dto.district !== undefined) venue.district = dto.district;
     if (dto.address !== undefined) venue.address = dto.address;
     if (dto.description !== undefined) venue.description = dto.description;
-    if (dto.website !== undefined) venue.website = normalizeWebsite(dto.website);
+    if (dto.website !== undefined)
+      venue.website = normalizeWebsite(dto.website);
     if (dto.images !== undefined) venue.images = dto.images;
     if (dto.tags !== undefined) venue.tags = dto.tags;
     if (dto.hours !== undefined) venue.hours = dto.hours;
@@ -241,12 +248,18 @@ export class AdminCitiesVenuesService {
     }
     const saved = await this.venues.save(venue);
     await this.invalidateForVenue(saved);
+    if (dto.images !== undefined) {
+      await this.uploads.diffAndDelete(previousImages, saved.images);
+    }
     return saved;
   }
 
+  // Soft delete keeps the row + its image files in case the venue needs
+  // to be restored. Only files removed via updateVenue's `images` diff
+  // get unlinked from disk.
   async deleteVenue(slug: string): Promise<void> {
     const venue = await this.getVenue(slug);
-    await this.venues.delete({ id: venue.id });
+    await this.venues.softDelete({ id: venue.id });
     await this.invalidateForVenue(venue);
   }
 

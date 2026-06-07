@@ -83,12 +83,14 @@ export class AdminToursController {
     return this.setPublished(id, false);
   }
 
+  // Soft delete: tour row + its image files stay so an undelete is
+  // possible. Image cleanup happens only via the update endpoint's diff.
   @Delete('tours/:id')
   @HttpCode(204)
   async remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     const tour = await this.tours.findOne({ where: { id } });
     if (!tour) throw new NotFoundException('Tour not found');
-    await this.tours.delete({ id });
+    await this.tours.softDelete({ id });
   }
 
   private async setPublished(id: string, isPublished: boolean): Promise<Tour> {

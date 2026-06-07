@@ -14,13 +14,17 @@ import {
 } from '../../database/entities';
 import { CreateCheckInDto, UpdateMemoryDto } from './dto/check-in.dto';
 import { isSameVnDay } from '../../common/utils/time.util';
+import { UploadCleanupService } from '../uploads/upload-cleanup.service';
 
 // A memory can be edited/deleted only within this window of its creation.
 const MEMORY_LOCK_MS = 30 * 60 * 1000;
 
 @Injectable()
 export class CheckInsService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly uploads: UploadCleanupService,
+  ) {}
 
   listByUser(userId: string): Promise<CheckIn[]> {
     return this.dataSource.getRepository(CheckIn).find({
@@ -28,6 +32,40 @@ export class CheckInsService {
       relations: { venue: { city: true } },
       order: { createdAt: 'DESC' },
     });
+  }
+
+  // Public-only check-ins surfaced on someone else's profile. Returns the
+  // same shape as listByUser but filtered to is_public = true so private
+  // memories never leak. Capped at `limit` (default 24) so the profile
+  // page stays bounded.
+  listPublicByUser(userId: string, limit = 24): Promise<CheckIn[]> {
+    return this.dataSource.getRepository(CheckIn).find({
+      where: { userId, isPublic: true },
+      relations: { venue: { city: true } },
+      order: { createdAt: 'DESC' },
+      take: Math.min(Math.max(limit, 1), 100),
+    });
+  }
+
+  // Single check-in for the public memory page (/m/[id] on the web). Loads
+  // the full venue (+ city) and the author so the page can render without
+  // additional round-trips. Returns null on:
+  //   - id not found
+  //   - check-in is private AND the viewer is not the owner
+  // The controller treats null as a 404 (we deliberately don't 403 — that
+  // would leak that the id exists; a stranger sees the same response as for
+  // a non-existent id).
+  async findByIdForViewer(
+    id: string,
+    viewerId?: string,
+  ): Promise<CheckIn | null> {
+    const ci = await this.dataSource.getRepository(CheckIn).findOne({
+      where: { id },
+      relations: { venue: { city: true }, user: true },
+    });
+    if (!ci) return null;
+    if (!ci.isPublic && ci.userId !== viewerId) return null;
+    return ci;
   }
 
   // Create a NEW check-in. A venue may be checked in many times, but at most
@@ -40,7 +78,9 @@ export class CheckInsService {
     dto: CreateCheckInDto,
   ): Promise<CheckIn> {
     return this.dataSource.transaction(async (manager) => {
-      const venue = await manager.findOne(Venue, { where: { slug: venueSlug } });
+      const venue = await manager.findOne(Venue, {
+        where: { slug: venueSlug },
+      });
       if (!venue) throw new NotFoundException(`Venue not found: ${venueSlug}`);
 
       const last = await manager.findOne(CheckIn, {
@@ -95,7 +135,12 @@ export class CheckInsService {
     userId: string,
     patch: UpdateMemoryDto,
   ): Promise<CheckIn> {
-    return this.dataSource.transaction(async (manager) => {
+    // Capture the set of photos that get dropped during the update so we
+    // can unlink them from disk AFTER the transaction commits — never
+    // before. If the tx rolls back for any reason, the file still exists
+    // and the row still points at it, so nothing dangles.
+    const droppedPhotos: string[] = [];
+    const saved = await this.dataSource.transaction(async (manager) => {
       const ci = await manager.findOne(CheckIn, { where: { id: checkInId } });
       if (!ci) throw new NotFoundException('Check-in not found');
       if (ci.userId !== userId) {
@@ -114,12 +159,23 @@ export class CheckInsService {
       }
 
       if (patch.comment !== undefined) ci.comment = patch.comment;
-      if (patch.photos !== undefined) ci.photos = patch.photos;
+      if (patch.photos !== undefined) {
+        const next = new Set(patch.photos);
+        for (const url of ci.photos ?? []) {
+          if (!next.has(url)) droppedPhotos.push(url);
+        }
+        ci.photos = patch.photos;
+      }
       if (patch.friends !== undefined) ci.friends = patch.friends;
       if (patch.isPublic !== undefined) ci.isPublic = patch.isPublic;
 
       return manager.save(ci);
     });
+
+    if (droppedPhotos.length > 0) {
+      await this.uploads.deleteByUrls(droppedPhotos);
+    }
+    return saved;
   }
 
   // Convenience wrappers that target the user's MOST RECENT check-in at a venue
@@ -163,10 +219,14 @@ export class CheckInsService {
     return latest;
   }
 
-  // Delete a specific check-in. Rule:
+  // Soft-delete a specific check-in. Rule:
   //  - No memory yet → deletable any time.
   //  - Memory created < 30 min ago → still deletable.
   //  - Memory created ≥ 30 min ago → LOCKED (cannot delete the check-in).
+  //
+  // Photo files are intentionally NOT unlinked here — the row stays in the
+  // DB (with deleted_at set) and can be restored later. Only photos that
+  // were explicitly removed via updateMemory() get unlinked from disk.
   async remove(checkInId: string, userId: string): Promise<void> {
     await this.dataSource.transaction(async (manager) => {
       const ci = await manager.findOne(CheckIn, { where: { id: checkInId } });
@@ -183,11 +243,13 @@ export class CheckInsService {
         );
       }
 
-      await manager.delete(CheckIn, { id: ci.id });
+      await manager.softDelete(CheckIn, { id: ci.id });
       await manager.decrement(User, { id: userId }, 'checkInCount', 1);
 
       // Upvotes require at least one check-in. If this was the user's last
-      // check-in at the venue, drop any lingering vote + denormalised counter.
+      // check-in at the venue, drop any lingering vote + denormalised
+      // counter. Votes themselves don't carry images, so we hard-delete
+      // them as before — no recovery concern.
       const remaining = await manager.count(CheckIn, {
         where: { venueId: ci.venueId, userId },
       });

@@ -95,10 +95,20 @@ export class User {
   @Column({ type: 'jsonb', default: () => "'{}'::jsonb" })
   socials: UserSocials;
 
-  @Column({ type: 'varchar', length: 80, name: 'instagram_handle', nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 80,
+    name: 'instagram_handle',
+    nullable: true,
+  })
   instagramHandle: string | null;
 
-  @Column({ type: 'varchar', length: 64, name: 'instagram_user_id', nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 64,
+    name: 'instagram_user_id',
+    nullable: true,
+  })
   instagramUserId: string | null;
 
   @Column({ type: 'text', name: 'instagram_access_token', nullable: true })
@@ -112,32 +122,65 @@ export class User {
   @Column({ type: 'varchar', length: 120, name: 'brand_name', nullable: true })
   brandName: string | null;
 
-  @Column({ type: 'varchar', length: 16, name: 'brand_short_name', nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 16,
+    name: 'brand_short_name',
+    nullable: true,
+  })
   brandShortName: string | null;
 
-  @Column({ type: 'varchar', length: 500, name: 'brand_logo_url', nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 500,
+    name: 'brand_logo_url',
+    nullable: true,
+  })
   brandLogoUrl: string | null;
 
   @Column({ type: 'text', name: 'brand_description', default: '' })
   brandDescription: string;
 
-  @Column({ type: 'varchar', length: 500, name: 'brand_website_url', nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 500,
+    name: 'brand_website_url',
+    nullable: true,
+  })
   brandWebsiteUrl: string | null;
 
-  @Column({ type: 'varchar', length: 200, name: 'brand_contact_email', nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 200,
+    name: 'brand_contact_email',
+    nullable: true,
+  })
   brandContactEmail: string | null;
 
   @Column({ type: 'boolean', name: 'brand_email_verified', default: false })
   brandEmailVerified: boolean;
 
-  @Column({ type: 'timestamptz', name: 'brand_email_verified_at', nullable: true })
+  @Column({
+    type: 'timestamptz',
+    name: 'brand_email_verified_at',
+    nullable: true,
+  })
   brandEmailVerifiedAt: Date | null;
 
   @Index({ unique: true, where: '"brand_verification_token" IS NOT NULL' })
-  @Column({ type: 'varchar', length: 96, name: 'brand_verification_token', nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 96,
+    name: 'brand_verification_token',
+    nullable: true,
+  })
   brandVerificationToken: string | null;
 
-  @Column({ type: 'timestamptz', name: 'brand_verification_token_expires_at', nullable: true })
+  @Column({
+    type: 'timestamptz',
+    name: 'brand_verification_token_expires_at',
+    nullable: true,
+  })
   brandVerificationTokenExpiresAt: Date | null;
 
   @Index()
@@ -147,7 +190,12 @@ export class User {
   @Column({ type: 'timestamptz', name: 'blocked_at', nullable: true })
   blockedAt: Date | null;
 
-  @Column({ type: 'varchar', length: 280, name: 'blocked_reason', nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 280,
+    name: 'blocked_reason',
+    nullable: true,
+  })
   blockedReason: string | null;
 
   @OneToMany(() => Review, (r) => r.user)

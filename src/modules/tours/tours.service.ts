@@ -5,7 +5,9 @@ import { Tour, Category } from '../../database/entities';
 
 @Injectable()
 export class ToursService {
-  constructor(@InjectRepository(Tour) private readonly tours: Repository<Tour>) {}
+  constructor(
+    @InjectRepository(Tour) private readonly tours: Repository<Tour>,
+  ) {}
 
   list(
     citySlug?: string,

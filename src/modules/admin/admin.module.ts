@@ -18,15 +18,29 @@ import { AdminToursController } from './admin-tours.controller';
 import { AdminBrandsController } from './admin-brands.controller';
 import { CitiesModule } from '../cities/cities.module';
 import { VenuesModule } from '../venues/venues.module';
+import { UploadsModule } from '../uploads/uploads.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Venue, City, Tour, Review, Vote, CheckIn, Brand]),
+    TypeOrmModule.forFeature([
+      User,
+      Venue,
+      City,
+      Tour,
+      Review,
+      Vote,
+      CheckIn,
+      Brand,
+    ]),
     CitiesModule,
     // Imported to surface WardNormalizerService — used on admin venue
     // create/update so editing the raw district immediately re-resolves
     // ward_canonical without a backfill pass.
     VenuesModule,
+    // UploadCleanupService — admin venue/brand/tour edits diff the image
+    // arrays they own and unlink files that get dropped from disk so the
+    // upload volume doesn't accumulate orphans.
+    UploadsModule,
   ],
   controllers: [
     AdminController,

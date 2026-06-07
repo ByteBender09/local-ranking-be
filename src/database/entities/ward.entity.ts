@@ -49,7 +49,7 @@ export class Ward {
     type: 'text',
     array: true,
     name: 'aliases_old_district',
-    default: () => "ARRAY[]::text[]",
+    default: () => 'ARRAY[]::text[]',
   })
   aliasesOldDistrict: string[];
 
@@ -60,7 +60,7 @@ export class Ward {
     type: 'text',
     array: true,
     name: 'aliases_old_wards',
-    default: () => "ARRAY[]::text[]",
+    default: () => 'ARRAY[]::text[]',
   })
   aliasesOldWards: string[];
 
@@ -69,7 +69,7 @@ export class Ward {
     type: 'text',
     array: true,
     name: 'aliases_user',
-    default: () => "ARRAY[]::text[]",
+    default: () => 'ARRAY[]::text[]',
   })
   aliasesUser: string[];
 

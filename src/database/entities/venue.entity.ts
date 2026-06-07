@@ -1,6 +1,7 @@
 import {
   Column,
   CreateDateColumn,
+  DeleteDateColumn,
   Entity,
   Index,
   JoinColumn,
@@ -70,7 +71,12 @@ export class Venue {
   // could not resolve this venue and an admin needs to triage. References
   // wards.name (city_id + name unique).
   @Index('idx_venues_ward_canonical')
-  @Column({ type: 'varchar', length: 120, name: 'ward_canonical', nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 120,
+    name: 'ward_canonical',
+    nullable: true,
+  })
   wardCanonical: string | null;
 
   // Mirrors wards.type for the resolved ward — denormalized to avoid a join
@@ -104,7 +110,7 @@ export class Venue {
   @Column({ type: 'varchar', length: 500, nullable: true })
   website: string | null;
 
-  @Column({ type: 'text', array: true, default: () => "ARRAY[]::text[]" })
+  @Column({ type: 'text', array: true, default: () => 'ARRAY[]::text[]' })
   images: string[];
 
   @Column({
@@ -125,7 +131,7 @@ export class Venue {
   @Column({ type: 'smallint', name: 'price_range', default: 2 })
   priceRange: number;
 
-  @Column({ type: 'text', array: true, default: () => "ARRAY[]::text[]" })
+  @Column({ type: 'text', array: true, default: () => 'ARRAY[]::text[]' })
   tags: string[];
 
   @Column({ type: 'varchar', length: 64 })
@@ -208,4 +214,11 @@ export class Venue {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  // Soft delete — softRemove() sets this. find/findOne auto-exclude when
+  // non-null. Images in `images[]` are preserved on soft delete so the
+  // venue can be restored without re-uploading; only images explicitly
+  // removed via the admin editor get unlinked from disk.
+  @DeleteDateColumn({ name: 'deleted_at' })
+  deletedAt: Date | null;
 }

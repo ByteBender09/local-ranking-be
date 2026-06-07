@@ -1,6 +1,7 @@
 import {
   Column,
   CreateDateColumn,
+  DeleteDateColumn,
   Entity,
   Index,
   JoinColumn,
@@ -39,10 +40,10 @@ export class CheckIn {
   @Column({ type: 'text', nullable: true })
   comment: string | null;
 
-  @Column({ type: 'text', array: true, default: () => "ARRAY[]::text[]" })
+  @Column({ type: 'text', array: true, default: () => 'ARRAY[]::text[]' })
   photos: string[];
 
-  @Column({ type: 'text', array: true, default: () => "ARRAY[]::text[]" })
+  @Column({ type: 'text', array: true, default: () => 'ARRAY[]::text[]' })
   friends: string[];
 
   @Column({ type: 'boolean', name: 'is_public', default: true })
@@ -58,4 +59,12 @@ export class CheckIn {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  // Soft delete — set by manager.softDelete()/softRemove(). TypeORM's
+  // find/findOne automatically exclude rows where this is non-null unless
+  // `withDeleted: true` is passed, so existing read paths just stop
+  // returning the row. Files referenced in `photos` are intentionally NOT
+  // unlinked on soft delete so the row is recoverable from DB if needed.
+  @DeleteDateColumn({ name: 'deleted_at' })
+  deletedAt: Date | null;
 }

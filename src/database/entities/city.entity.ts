@@ -40,7 +40,7 @@ export class City {
   @Column({ type: 'text' })
   description: string;
 
-  @Column({ type: 'text', array: true, default: () => "ARRAY[]::text[]" })
+  @Column({ type: 'text', array: true, default: () => 'ARRAY[]::text[]' })
   highlights: string[];
 
   @Column({ type: 'double precision', nullable: true })
