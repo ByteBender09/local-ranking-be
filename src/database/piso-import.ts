@@ -64,7 +64,7 @@ const FLAGS = {
   category: arg('category', '') as Category | '',
   count: parseInt(arg('count', '10'), 10),
   minRating: parseFloat(arg('min-rating', '4.0')),
-  minReviews: parseInt(arg('min-reviews', '100'), 10),
+  minReviews: parseInt(arg('min-reviews', '90'), 10),
   minImages: parseInt(arg('min-images', '5'), 10),
   skipIfImagesLt: parseInt(arg('skip-if-imgs-lt', '2'), 10),
   photos: parseInt(arg('photos', '5'), 10),
@@ -72,9 +72,129 @@ const FLAGS = {
   uploadDelay: parseInt(arg('upload-delay', '300'), 10),
   apiDelay: parseInt(arg('api-delay', '500'), 10),
   cacheTtlDays: parseInt(arg('cache-ttl-days', '30'), 10),
+  // 2025 merger guard radius: a venue within this many km of a sibling
+  // city's center is treated as belonging to that sibling and skipped.
+  // 15 km comfortably excludes Hội An (~30 km from Đà Nẵng center) while
+  // still letting Bà Nà Hills (40 km west of Đà Nẵng) through.
+  siblingRadiusKm: parseFloat(arg('sibling-radius-km', '15')),
   noCache: process.argv.includes('--no-cache'),
   dryRun: !process.argv.includes('--apply'),
 };
+
+// ── 2025 merger guard ──────────────────────────────────────────────────────
+// Resolution 36/2025/QH15 (effective 2025) merged several provinces into the
+// adjacent centrally-controlled cities. Our DB keeps the OLD city slugs
+// because the FE has separate landing pages for Hội An vs Đà Nẵng etc.
+// PISO mirrors Google's post-merger boundaries — a search for "bar Đà Nẵng"
+// now returns places in Hội An, Tam Kỳ, Mỹ Sơn, etc. that legally belong to
+// the merged Đà Nẵng but in our data model belong to a sibling city slug.
+//
+// SIBLING_GUARDS[city] lists the patterns that, when found in a PISO result,
+// mark it as "actually a sibling city's venue" → skip during import. Match
+// is case-insensitive on the address text. Each guard also includes a
+// sibling center coord so we can reject by proximity even when the address
+// text is missing the giveaway label (Google's "Đà Nẵng" labels swallow
+// older "Hội An" / "Quảng Nam" formatting in some rows).
+interface SiblingGuard {
+  // Whole-token regex patterns (word-boundary aware). Use `\b` between
+  // tokens so "phu my" doesn't false-match "phu my hung" (Phú Mỹ Hưng,
+  // a legitimate HCM Quận 7 area).
+  addressPatterns: RegExp[];
+  excludeNearLat?: number;       // skip if within --sibling-radius-km of these coords
+  excludeNearLng?: number;
+}
+// Build regex that matches a phrase only when followed by whitespace,
+// punctuation, or end-of-string (i.e. "phu my" but not "phu my hung").
+const ph = (phrase: string): RegExp =>
+  new RegExp(`\\b${phrase.replace(/\s+/g, '\\s+')}(?:[\\s,.]|$)`, 'i');
+
+const SIBLING_GUARDS: Record<string, SiblingGuard[]> = {
+  // New Đà Nẵng = old Đà Nẵng + Quảng Nam. We keep `hoi-an` as its own slug
+  // for the popular old town, so explicit "Hội An" / "Quảng Nam" hits get
+  // diverted. Other old-Quảng-Nam districts (Tam Kỳ, Núi Thành, Duy Xuyên
+  // far south) have no separate slug — keep them under `da-nang` rather
+  // than dropping good content.
+  'da-nang': [
+    {
+      addressPatterns: [
+        ph('hoi an'), ph('quang nam'),
+        ph('minh an'), ph('cam pho'), ph('cam an'), ph('cam thanh'),  // Hội An wards
+      ],
+      excludeNearLat: 15.8801, excludeNearLng: 108.338, // Hội An center
+    },
+  ],
+  // New HCM = old HCM + Bình Dương + Bà Rịa-Vũng Tàu. We keep `vung-tau`
+  // for the resort city; Bình Dương has no separate slug so its venues
+  // are dropped (admin can re-route later if a Bình Dương slug is added).
+  // Patterns avoid "phu my" alone (clashes with HCM's "Phú Mỹ Hưng") —
+  // require "phu my " followed by a separator, NOT "hung".
+  'ho-chi-minh': [
+    {
+      addressPatterns: [
+        ph('vung tau'), ph('ba ria'), ph('con dao'), ph('long hai'),
+      ],
+      excludeNearLat: 10.3459, excludeNearLng: 107.0843,
+    },
+    {
+      addressPatterns: [
+        ph('binh duong'), ph('thu dau mot'), ph('thuan an'),
+        ph('di an'), ph('ben cat'), ph('tan uyen'),
+      ],
+      excludeNearLat: 10.98, excludeNearLng: 106.65,
+    },
+  ],
+  // Mirrors — when importing the SIBLING side, drop venues that belong
+  // to the parent merged city.
+  'hoi-an': [
+    {
+      addressPatterns: [
+        ph('hai chau'), ph('son tra'), ph('thanh khe'), ph('lien chieu'),
+        ph('ngu hanh son'), ph('cam le'), ph('hoa vang'),
+      ],
+      excludeNearLat: 16.0544, excludeNearLng: 108.2022,
+    },
+  ],
+  'vung-tau': [
+    {
+      addressPatterns: [
+        ph('thanh pho ho chi minh'), ph('tp hcm'), ph('tphcm'),
+        ph('sai gon'), ph('thu duc'),
+      ],
+      excludeNearLat: 10.7769, excludeNearLng: 106.7009,
+    },
+  ],
+};
+
+function normalizeForGuard(s: string): string {
+  return s.toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd')
+    .replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+// Returns the offending pattern (or "near sibling X") if the result belongs
+// to a sibling city's territory and should be skipped; null otherwise.
+function siblingGuardReason(
+  citySlug: string,
+  candidate: { location?: { latitude?: number; longitude?: number; address?: { full?: string } } },
+  siblingRadiusKm: number,
+): string | null {
+  const guards = SIBLING_GUARDS[citySlug];
+  if (!guards) return null;
+  const addr = normalizeForGuard(candidate.location?.address?.full ?? '');
+  const lat = candidate.location?.latitude;
+  const lng = candidate.location?.longitude;
+  for (const g of guards) {
+    for (const pat of g.addressPatterns) {
+      if (pat.test(addr)) return `address matches "${pat.source}"`;
+    }
+    if (typeof lat === 'number' && typeof lng === 'number'
+        && g.excludeNearLat != null && g.excludeNearLng != null) {
+      const d = haversineKm(lat, lng, g.excludeNearLat, g.excludeNearLng);
+      if (d < siblingRadiusKm) return `${d.toFixed(1)}km from sibling city center`;
+    }
+  }
+  return null;
+}
 
 // Category-specific search keywords. Multiple terms widen the funnel so a
 // dedupe-by-data_id usually yields 50-100 candidates per category.
@@ -122,6 +242,7 @@ async function importCategory(
   // PHASE 1 — search
   const keywords = CATEGORY_KEYWORDS[category];
   const candidates = new Map<string, PisoSearchItem>();
+  let siblingRejected = 0;
   for (const kw of keywords) {
     const q = `${kw} ${city.name}`;
     const hitsBefore = cacheStats.searchHit;
@@ -136,6 +257,14 @@ async function importCategory(
         if (typeof la === 'number' && typeof lo === 'number') {
           if (haversineKm(city.lat, city.lng, la, lo) > 120) continue;
         }
+        // 2025 merger guard — a search for "bar Đà Nẵng" can now return
+        // Hội An / Tam Kỳ / Mỹ Sơn rows; reject them so they don't get
+        // mis-attached to the wrong city slug in our DB.
+        const siblingReject = siblingGuardReason(city.slug, r, FLAGS.siblingRadiusKm);
+        if (siblingReject) {
+          siblingRejected++;
+          continue;
+        }
         if (!candidates.has(r.data_id)) candidates.set(r.data_id, r);
       }
       if (!fromCache) await sleep(FLAGS.apiDelay);
@@ -144,7 +273,7 @@ async function importCategory(
       await sleep(FLAGS.apiDelay);
     }
   }
-  log(`  → ${candidates.size} unique candidates`);
+  log(`  → ${candidates.size} unique candidates${siblingRejected ? ` (rejected ${siblingRejected} sibling-city venues)` : ''}`);
 
   // PHASE 2 — quality filter on search-level fields + dedupe
   let droppedRating = 0, droppedReviews = 0, droppedDup = 0;

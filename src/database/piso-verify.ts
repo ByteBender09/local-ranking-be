@@ -18,16 +18,26 @@ import {
   type PisoSearchItem, type PisoPlace, type PisoReview,
 } from './piso-api';
 
+// The 2025 merger sibling-city guard lives in piso-import.ts (prevents new
+// leaks). Verify intentionally does NOT delete venues based on sibling
+// mismatch — high-quality merged-territory landmarks (Mỹ Sơn etc.) are
+// kept even if their address belongs to old Quảng Nam / Bình Dương /
+// Bà Rịa-Vũng Tàu. Treat sibling cleanup as a separate concern.
+
 dotenv.config();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COMMAND 2 — Audit + verify + fix venues that don't pass quality bar.
 //
 // Selection: any venue (excluding curated by default) that fails ANY of:
-//   - external_review_count <= --min-reviews   (default 100)
+//   - external_review_count <= --min-reviews   (default 90)
 //   - rating <= --min-rating                   (default 4.0)
 //   - images empty OR all images.unsplash.com  (placeholder leak)
-//   - ward_canonical IS NULL                   (ward never resolved)
+//
+// NOTE — `ward_canonical IS NULL` is NOT a failing criterion. Ward resolution
+// is a separate concern handled by `backfill-venue-wards.ts` (text + geo
+// resolver, no PISO needed). Burning PISO quota on a venue whose only flaw
+// is a missing ward was triggering 429s for no value.
 //
 // For each failing venue:
 //   1. Refresh from PISO (external_id → /place, else search by name+coords).
@@ -55,7 +65,7 @@ const FLAGS = {
   city: arg('city', ''),
   limit: parseInt(arg('limit', '0'), 10),
   minRating: parseFloat(arg('min-rating', '4.0')),
-  minReviews: parseInt(arg('min-reviews', '100'), 10),
+  minReviews: parseInt(arg('min-reviews', '90'), 10),
   minImages: parseInt(arg('min-images', '4'), 10),
   photos: parseInt(arg('photos', '5'), 10),
   reviews: parseInt(arg('reviews', '4'), 10),
@@ -173,6 +183,13 @@ async function main(): Promise<void> {
   }
 
   // PHASE 1 — query failing venues
+  //
+  // NOTE — sibling-city mismatch is INTENTIONALLY not in this predicate.
+  // The 2025 merger guard belongs to the import pipeline (piso-import.ts)
+  // where it prevents new leaks. Treating mismatch as a hard fail during
+  // verify would auto-delete famous merged-territory landmarks like Mỹ
+  // Sơn (UNESCO, 12K+ reviews) just because its address still says
+  // "Quảng Nam". For an existing dataset we accept that signature.
   const conds: string[] = [`v.deleted_at IS NULL`, `v.is_published = true`];
   if (!FLAGS.includeCurated) conds.push(`v.source <> 'curated'`);
   if (FLAGS.city) conds.push(`c.slug = '${FLAGS.city.replace(/'/g, '')}'`);
@@ -187,7 +204,6 @@ async function main(): Promise<void> {
         SELECT 1 FROM unnest(v.images) i WHERE i NOT LIKE 'https://images.unsplash.com/%'
       )
     )
-    OR v.ward_canonical IS NULL
   )`;
   const limitSql = FLAGS.limit > 0 ? `LIMIT ${FLAGS.limit}` : '';
 
@@ -214,6 +230,53 @@ async function main(): Promise<void> {
     const v = venues[i];
     log(`[${i + 1}/${venues.length}] ${v.city_slug} / ${v.name}  (source=${v.source}, ext=${!!v.external_id})`);
     log(`  current: ${v.rating}★ ${v.external_review_count} reviews, ${v.images?.length ?? 0} imgs, ward=${v.ward_canonical ?? 'NULL'}`);
+
+    // DECIDE: do we need to call PISO at all?
+    //
+    // PISO refresh is only useful when we need fresh IMAGES — every other
+    // quality dimension (rating, reviews) is stored on the row and won't
+    // change drastically between runs. So:
+    //   - Real images exist AND rating isn't the suspicious 5.0 default
+    //       → stored data is trustworthy; just validate it and DELETE if
+    //         it doesn't pass the gate. No PISO call.
+    //   - Images missing OR all-Unsplash OR rating exactly 5.0 (fake)
+    //       → genuinely worth a PISO refresh to try to recover.
+    //
+    // This saves the Piso quota for the venues that actually need it and
+    // makes the verify pass finish in minutes instead of hitting 429.
+    const storedReviews = v.external_review_count ?? 0;
+    const storedRating = parseFloat(v.rating ?? '0');
+    const storedImgs = v.images ?? [];
+    const imagesEmpty = storedImgs.length === 0;
+    const allUnsplash = storedImgs.length > 0
+      && storedImgs.every((u) => u.startsWith('https://images.unsplash.com/'));
+    const ratingIsFakeFive = Math.abs(storedRating - 5.0) < 0.001;
+    const needsPisoRefresh = imagesEmpty || allUnsplash || ratingIsFakeFive;
+
+    if (!needsPisoRefresh) {
+      // Validate against the stored numbers. The row arrived in this loop
+      // because the SQL predicate already flagged it as failing on rating
+      // or reviews — surface which one and delete.
+      const failsRating = storedRating <= FLAGS.minRating;
+      const failsReviews = storedReviews <= FLAGS.minReviews;
+      const why = [
+        failsRating && `rating ${storedRating}<=${FLAGS.minRating}`,
+        failsReviews && `reviews ${storedReviews}<=${FLAGS.minReviews}`,
+      ].filter(Boolean).join(', ') || 'fails quality gate';
+      log(`  ✗ DELETE — stored data ${why} (no PISO refresh needed)`);
+      if (FLAGS.apply) {
+        await venueRepo.softDelete({ id: v.id });
+        if (FLAGS.cleanupVolume) filesToUnlink.push(...storedImgs);
+      }
+      deleted++;
+      continue;
+    }
+
+    log(`  → needs PISO refresh (${[
+      imagesEmpty && 'no images',
+      allUnsplash && 'all Unsplash',
+      ratingIsFakeFive && 'rating=5.0 fake',
+    ].filter(Boolean).join(', ')})`);
 
     try {
       const { place, matched, gone } = await refreshFromPiso(v);

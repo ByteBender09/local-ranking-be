@@ -110,10 +110,14 @@ function writeJson<T>(file: string, value: T): void {
 export const cacheStats = { searchHit: 0, searchMiss: 0, placeHit: 0, placeMiss: 0 };
 
 // ── HTTP retry wrapper ──────────────────────────────────────────────────────
-// 429 = throttled → exponential backoff up to ~60s; permanent 4xx breaks
+// 429 = throttled → exponential backoff up to ~5 min; permanent 4xx breaks
 // immediately; transient 5xx + network errors retry with linear backoff.
+// Bumped to 7 tries from 5 after the Piso quota was nearly exhausted during
+// a 712-venue verify run — the 65s budget the 5-try version offered wasn't
+// enough to ride through bursts where Google's downstream rate-limit had
+// stacked our requests in a queue.
 export async function withRetry<T>(
-  fn: () => Promise<T>, label: string, tries = 5,
+  fn: () => Promise<T>, label: string, tries = 7,
 ): Promise<T> {
   let last: unknown;
   for (let i = 0; i < tries; i++) {
@@ -121,9 +125,9 @@ export async function withRetry<T>(
       last = e;
       const status = axios.isAxiosError(e) ? e.response?.status : undefined;
       if (status && status < 500 && status !== 429) break;
-      // 429 needs a longer pause than transient 5xx — the throttler bucket
-      // refills slowly. Linear-then-bumped backoff: 5s, 8s, 13s, 21s, 34s.
-      const wait = status === 429 ? 5000 * Math.pow(1.5, i) : 1000 * (i + 1);
+      // 429 wait progression: 10s, 15s, 22s, 33s, 50s, 75s, 113s (~5 min total).
+      // Wait between transient 5xx stays linear (1s, 2s, 3s, …).
+      const wait = status === 429 ? 10000 * Math.pow(1.5, i) : 1000 * (i + 1);
       await sleep(wait);
     }
   }
