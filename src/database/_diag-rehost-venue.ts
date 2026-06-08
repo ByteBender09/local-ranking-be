@@ -75,8 +75,15 @@ async function rehostVenue(venue: Venue): Promise<{ rehosted: number; skipped: n
       out.push(hosted);
       rehosted += 1;
     } catch (e) {
+      // KEEP the original URL on failure. Earlier this branch dropped the URL
+      // entirely, so an Unsplash 429 burst during --all wiped the venue's
+      // images[] to an empty array — the venue then rendered as the dead-
+      // image placeholder. Better to leave the external URL in place so the
+      // FE SafeImage's picsum fallback still has something to fail-over from,
+      // and a later rehost retry can pick it up.
+      out.push(trimmed);
       skipped += 1;
-      console.log(`✗ ${e instanceof Error ? e.message : String(e)}`);
+      console.log(`✗ ${e instanceof Error ? e.message : String(e)} (kept original)`);
     }
   }
   venue.images = out;
