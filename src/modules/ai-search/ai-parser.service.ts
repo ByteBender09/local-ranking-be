@@ -151,12 +151,34 @@ ABSOLUTE RULES:
 6. Categories (English slugs always): cafe, restaurant, street_food, viewpoint, beach,
    homestay, bar, museum, park, shopping.
    - "lăng tẩm"/"đền chùa"/"di tích" / "temple"/"shrine"/"historic site" → ["museum"]
-   - "bãi biển"/"biển" / "beach" → ["beach"]
-   - "homestay"/"hostel"/"airbnb" → ["homestay"]
+   - "bãi biển"/"biển" / "beach" → ["beach"] — BUT see rule 6a below for inland cities.
+   - "homestay"/"hostel"/"airbnb"/"guesthouse" → ["homestay"]
    - "nghệ thuật"/"art"/"artsy"/"artistic"/"nghệ sĩ"/"sáng tạo"/"sống ảo nghệ thuật"
      / "gallery"/"creative" → ["viewpoint","museum"]
    - "bảo tàng"/"triển lãm" / "museum"/"exhibition" → ["museum"]
-   - "view đẹp"/"ngắm cảnh"/"check-in cảnh" / "scenic"/"viewpoint"/"lookout" → ["viewpoint"]
+   - "view đẹp"/"ngắm cảnh"/"check-in cảnh"/"săn mây"/"đồi"/"núi"/"thác"
+     / "scenic"/"viewpoint"/"lookout"/"hike"/"trekking"/"mountain"/"waterfall" → ["viewpoint"]
+   - BAR / NIGHTLIFE (everything alcoholic / late-night goes to "bar"):
+     "bar"/"quán bar"/"pub"/"club"/"hộp đêm"/"vũ trường"/"cocktail"/"craft beer"/
+     "bia tươi"/"bia hơi"/"bia thủ công"/"brewery"/"rooftop bar"/"sky bar"/"speakeasy"/
+     "whisky"/"wine bar"/"beer garden"/"vườn bia"/"nightlife"/"nightclub"/"DJ" → ["bar"].
+     "rooftop" alone (without "bar"/"coffee") is AMBIGUOUS — if morning/cafe context →
+     ["cafe"] + vibe_tags+=["rooftop"]; if evening/drinking context → ["bar"] +
+     vibe_tags+=["rooftop"]; if pure ambiguous → ["bar","cafe"] and add "rooftop" to
+     ambiguous_terms.
+   - WALKING STREET / PHỐ CỔ:
+     "phố đi bộ"/"walking street"/"phố cổ"/"old quarter"/"old town"/"phố Tây"/
+     "Bùi Viện"/"Tạ Hiện"/"đèn lồng" → categories=["street_food"] (these zones are
+     primarily food-and-drink strips in our data).
+
+6a. INLAND-CITY BEACH GUARD: if the user mentions "biển"/"beach"/"bãi tắm" and the
+    selected city is ONE OF: da-lat, ha-noi, sa-pa, ninh-binh, hue (no real coastline
+    in our data), DO NOT set categories=["beach"]. Instead:
+    - "biển + Đà Lạt/Sa Pa/Ninh Bình" usually means "hồ"/"đồi"/"thác" → ["viewpoint"]
+    - "đường đi bộ ven biển + Huế" → ["street_food"] (it's the walking street, not real beach)
+    - Add "beach" to ambiguous_terms so the FE can show a hint.
+    Beach is real for: da-nang, hoi-an, nha-trang, phu-quoc, quang-ninh, vung-tau, ho-chi-minh
+    (Vũng Tàu/Cần Giờ day-trip).
 7. Price mapping (use price_min for "expensive only", price_max for "cheap or under"):
    - "rẻ"/"bình dân"/"sinh viên" / "cheap"/"budget"/"affordable" → price_max=2, price_min=null
    - "tầm trung" / "mid-range"/"moderate" → price_min=2, price_max=3
@@ -166,9 +188,12 @@ ABSOLUTE RULES:
    - "siêu sang"/"ultra luxury" → price_min=4
 8. Vibe (free-form array, language as user wrote it):
    - Vietnamese: "chilling", "yên tĩnh", "sống ảo", "lãng mạn", "sôi động", "view đẹp",
-     "rooftop", "có sân vườn", "có view biển"
+     "rooftop", "có sân vườn", "có view biển", "săn mây", "view phố cổ", "view sông"
    - English: "chill", "quiet", "instagrammable", "romantic", "lively", "great view",
-     "rooftop", "garden", "ocean view", "cozy"
+     "rooftop", "garden", "ocean view", "cozy", "cloud-hunting", "river view"
+   - Vibes describe atmosphere, NOT the category. "rooftop" goes here when it's a
+     modifier of an unrelated category (e.g. "rooftop cafe to work" → category=cafe,
+     vibe=["rooftop"]).
 9. Result count: "top X" / "X quán" / "X places" → result_count=X
 10. Sort:
     - "hot"/"trending"/"đang được yêu thích" / "popular"/"trending"/"hottest" → "trending"
@@ -189,7 +214,30 @@ ABSOLUTE RULES:
 14. Landmark: "gần Hồ Gươm"/"cạnh sân bay" / "near Hoan Kiem Lake"/"close to the airport"
     → near_landmark (keep the proper-noun form the user wrote).
 15. Cuisine ("đồ Hàn", "phở", "Korean food", "Vietnamese", "Italian") → cuisine field.
-16. Unknown / non-extractable fields → null (scalar) or [] (array). ALL fields are required.`;
+16. Unknown / non-extractable fields → null (scalar) or [] (array). ALL fields are required.
+
+17. CITY STRENGTH HINTS — when the user query is vague ("đi Đà Lạt chơi gì?" /
+    "what to do in Hoi An?") and no category is explicit, leave categories=[] but
+    bias vibe_tags toward the city's signature. This is informational only — DO NOT
+    force a category if the user was vague. The reranker reads this.
+    - ho-chi-minh: bar/nightlife, cafe, street_food (Bùi Viện, Q1, Thảo Điền)
+    - ha-noi:      bar (Tạ Hiện), street_food, museum, viewpoint (Hồ Gươm, phố cổ)
+    - da-nang:     beach (Mỹ Khê), cafe, viewpoint (Bà Nà, Sơn Trà)
+    - hoi-an:      street_food (phố cổ, đèn lồng), viewpoint, cafe
+    - hue:         museum (Đại Nội, lăng tẩm), street_food, restaurant
+    - da-lat:      viewpoint (núi, đồi chè, săn mây), homestay, cafe
+    - nha-trang:   beach, viewpoint
+    - ninh-binh:   viewpoint (Tràng An, hang Múa, Tam Cốc, di sản UNESCO)
+    - sa-pa:       viewpoint (Fansipan, ruộng bậc thang), homestay
+    - quang-ninh:  beach (Hạ Long, Bãi Cháy), viewpoint
+    - vung-tau:    beach, cafe (view biển)
+    - phu-quoc:    beach, viewpoint
+
+18. SOFT FILTER vs HARD FILTER. Use vibe_tags (soft) when the user is describing
+    atmosphere; use categories (hard) only when they explicitly named a venue type.
+    "quán chill view đẹp ở Đà Lạt" → categories=[], vibe=["chill","view đẹp"] —
+    let the reranker pick across cafes/bars/viewpoints. "quán bar chill ở Đà Lạt" →
+    categories=["bar"], vibe=["chill"].`;
 
 // Maps the snake_case tool-call args to the camelCase ParsedIntent type.
 // LLM speaks snake_case (JSON-Schema convention), the rest of the BE uses

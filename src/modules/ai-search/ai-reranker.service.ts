@@ -108,13 +108,33 @@ export class AiRerankerService {
     // Localized prompt strings — see below for the per-language wording.
     // The system prompt PINS the intro language so the model doesn't drift.
     const isEn = intent.language === 'en';
+    // Hint the reranker about each city's signature categories so vague queries
+    // ("đi Đà Lạt chơi gì?") surface the city's strengths first. Keep in sync
+    // with rule 17 in the parser prompt — the two halves of the AI pipeline
+    // should agree on what each city is known for.
+    const CITY_STRENGTHS_HINT =
+      'City strengths to favor on vague queries: ' +
+      'da-lat→viewpoint+homestay+cafe; ' +
+      'ha-noi→bar+street_food+museum; ' +
+      'da-nang→beach+cafe+viewpoint; ' +
+      'hoi-an→street_food(phố cổ)+viewpoint+cafe; ' +
+      'hue→museum+street_food; ' +
+      'ho-chi-minh→bar+cafe+street_food; ' +
+      'nha-trang+phu-quoc+vung-tau+quang-ninh→beach; ' +
+      'ninh-binh→viewpoint(Tràng An/hang Múa); sa-pa→viewpoint+homestay. ' +
+      'Inland cities (da-lat,ha-noi,sa-pa,ninh-binh,hue) do NOT have beach — ' +
+      'never recommend "biển" there even if a venue tag mentions hồ/đầm. ' +
+      'The "bar" category includes rooftop bars, cocktail bars, pubs, clubs, ' +
+      'breweries — treat them as one nightlife bucket.';
+
     const t = isEn
       ? {
           system:
             'You re-rank Vietnam travel venues and write a single warm intro ' +
             'sentence to open the recommendations. Talk like a friend — never ' +
             'invent venue ids. Call rerank_venues. CRITICAL: write the intro ' +
-            'in ENGLISH.',
+            'in ENGLISH.\n' +
+            CITY_STRENGTHS_HINT,
           userIntro:
             `Original query: "${query}"\n` +
             (intent.vibeTags.length ? `User vibe: ${intent.vibeTags.join(', ')}\n` : '') +
@@ -132,7 +152,8 @@ export class AiRerankerService {
             'Bạn là re-ranker địa điểm du lịch Việt Nam, đồng thời viết một câu ' +
             'mở đầu thân thiện giới thiệu danh sách gợi ý. Nói chuyện như bạn bè — ' +
             'không xưng "tôi là AI", không bịa venue id. Gọi rerank_venues. ' +
-            'QUAN TRỌNG: viết intro bằng TIẾNG VIỆT.',
+            'QUAN TRỌNG: viết intro bằng TIẾNG VIỆT.\n' +
+            CITY_STRENGTHS_HINT,
           userIntro:
             `Query gốc: "${query}"\n` +
             (intent.vibeTags.length ? `Vibe người dùng: ${intent.vibeTags.join(', ')}\n` : '') +
