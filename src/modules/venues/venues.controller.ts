@@ -64,6 +64,15 @@ export class VenuesController {
     return this.venues.categoryCounts(citySlug);
   }
 
+  // Canonical category enum + VN labels. Source of truth for FE chip filters —
+  // FE must NOT infer chips from venue.tags (that's how "rooftop bar" leaked
+  // in as a chip while the proper "bar" category was missing).
+  @Get('categories')
+  @PublicCache({ sMaxAge: 86400, staleWhileRevalidate: 604800 })
+  categories(): Array<{ value: string; label: string }> {
+    return this.venues.categories();
+  }
+
   // All published venue slugs + updatedAt for the sitemap. Lightweight (no
   // heavy columns) so the FE can list every venue, not just the first page.
   // Declared before ':slug' so the static path wins the route match.

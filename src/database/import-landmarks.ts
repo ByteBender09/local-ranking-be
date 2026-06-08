@@ -4,7 +4,18 @@ import { DataSource } from 'typeorm';
 import { dataSourceOptions } from './data-source';
 import { City, Venue } from './entities';
 import { LANDMARK_VENUES } from './seed-data/landmark-venues';
+import { LANDMARK_VENUES_EXTRA } from './seed-data/landmark-venues-2026-06';
 import { imagesForVenue } from './seed-data/images';
+
+// Merge original + extra batches. Re-runs are still idempotent because
+// dedupe is by slug below.
+function mergeLandmarks(): typeof LANDMARK_VENUES {
+  const merged: typeof LANDMARK_VENUES = { ...LANDMARK_VENUES };
+  for (const [city, venues] of Object.entries(LANDMARK_VENUES_EXTRA)) {
+    merged[city] = [...(merged[city] ?? []), ...venues];
+  }
+  return merged;
+}
 
 dotenv.config();
 
@@ -40,7 +51,7 @@ async function main(): Promise<void> {
   let skipped = 0;
   let missingCity = 0;
 
-  for (const [citySlug, venues] of Object.entries(LANDMARK_VENUES)) {
+  for (const [citySlug, venues] of Object.entries(mergeLandmarks())) {
     const city = await cityRepo.findOne({ where: { slug: citySlug } });
     if (!city) {
       console.warn(`⚠ City "${citySlug}" not found — skipping ${venues.length} venues`);
@@ -51,7 +62,9 @@ async function main(): Promise<void> {
     let cityCreated = 0;
     for (const v of venues) {
       const slug = `${slugify(v.name)}-${citySlug}`;
-      const existing = await venueRepo.findOne({ where: { slug } });
+      // withDeleted so a soft-deleted venue with the same slug still blocks
+      // insertion (unique constraint applies to soft-deleted rows too).
+      const existing = await venueRepo.findOne({ where: { slug }, withDeleted: true });
       if (existing) {
         skipped++;
         continue;
@@ -77,6 +90,8 @@ async function main(): Promise<void> {
           upvotes: seedRandom(slug, 2500, 100),
           isPublished: true,
           source: 'curated',
+          externalRating: 0,
+          externalReviewCount: 0,
         }),
       );
       created++;

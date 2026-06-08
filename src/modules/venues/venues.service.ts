@@ -49,6 +49,21 @@ export class VenuesService {
     return this.repo.categoryCounts(citySlug);
   }
 
+  categories(): Array<{ value: string; label: string }> {
+    return [
+      { value: 'cafe', label: 'Cà phê' },
+      { value: 'restaurant', label: 'Nhà hàng' },
+      { value: 'street_food', label: 'Ẩm thực đường phố' },
+      { value: 'bar', label: 'Bar & Nightlife' },
+      { value: 'viewpoint', label: 'Ngắm cảnh' },
+      { value: 'beach', label: 'Biển' },
+      { value: 'homestay', label: 'Homestay' },
+      { value: 'museum', label: 'Bảo tàng & Di tích' },
+      { value: 'park', label: 'Công viên' },
+      { value: 'shopping', label: 'Mua sắm' },
+    ];
+  }
+
   sitemapEntries(): Promise<Array<{ slug: string; updatedAt: Date }>> {
     return this.repo.sitemapEntries();
   }
