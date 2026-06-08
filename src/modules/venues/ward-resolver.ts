@@ -193,13 +193,32 @@ export function resolveWardFromVenue(
   if (fromDistrict) return fromDistrict;
   if (!address) return null;
 
-  // Drop the first segment (street/building number) and the last 2
-  // segments (city, country). What's left is most likely the ward.
+  // Drop the LAST 1-2 segments (city + country) — those are reliably the
+  // tail of every address. Then walk what remains looking for a ward hit.
+  //
+  // Originally this also dropped parts[0] assuming it was a street/building
+  // number. That breaks when the address starts with the ward itself —
+  // PISO returns rows like "Thuận Hóa, Tp. Huế, Huế, Việt Nam" where index
+  // 0 IS the ward. Instead of dropping index 0 unconditionally, just skip
+  // any segment that LOOKS like a street: starts with a digit, contains
+  // "/", or has an explicit street-type prefix. resolveWardText also runs
+  // a name-then-alias match internally, so unknown segments produce no
+  // false positives.
   const parts = address.split(',').map((p) => p.trim()).filter(Boolean);
   if (parts.length < 3) return null;
-  const candidates = parts.slice(1, parts.length - 2);
+  const lastWard = parts.length - (parts[parts.length - 1].toLowerCase().includes('việt')
+    || parts[parts.length - 1].toLowerCase().includes('vietnam') ? 2 : 1);
+  const candidates = parts.slice(0, lastWard);
+
+  const looksLikeStreet = (s: string): boolean => {
+    if (/^\d/.test(s)) return true;                        // "16 Chu Văn An"
+    if (s.includes('/')) return true;                       // "K280/23 Hoàng Diệu"
+    if (/^(đường|phố|hẻm|ngõ|ngách|tổ|đ\.|p\.|kp)\s/i.test(s)) return true;
+    return false;
+  };
 
   for (const candidate of candidates) {
+    if (looksLikeStreet(candidate)) continue;
     const r = resolveWardText(candidate, wards);
     if (r) return { ...r, method: r.method, matchedVia: `address:${candidate}` };
   }
