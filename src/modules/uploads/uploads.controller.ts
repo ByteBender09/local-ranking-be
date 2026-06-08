@@ -57,18 +57,29 @@ export class UploadsController {
   // diagnostic to diff disk against DB references. Admin-only — the upload
   // volume is on a private Railway disk and we don't want to expose
   // directory listings publicly.
+  //
+  // Returns the resolved root + any readdir error so a "0 files" result on
+  // an obviously-populated volume can be diagnosed (wrong UPLOAD_DIR,
+  // permission, mount missing, etc) instead of looking like an empty disk.
   @Get('list')
-  async list(): Promise<{ files: string[]; total: number }> {
-    const cfg = this.config.get<{ diskPath: string }>('upload');
-    if (!cfg) return { files: [], total: 0 };
+  async list(): Promise<{
+    files: string[];
+    total: number;
+    root: string;
+    error?: string;
+  }> {
+    const cfg = this.config.get<UploadConfig>('upload');
+    if (!cfg) return { files: [], total: 0, root: '(no config)', error: 'no upload config' };
     const root = cfg.diskPath;
-    let files: string[] = [];
     try {
-      files = (await fs.readdir(root)).filter((f) => !f.startsWith('.'));
-    } catch {
-      // Volume not mounted in this environment — return empty.
+      const files = (await fs.readdir(root)).filter((f) => !f.startsWith('.'));
+      return { files, total: files.length, root };
+    } catch (e) {
+      return {
+        files: [], total: 0, root,
+        error: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+      };
     }
-    return { files, total: files.length };
   }
 
   // Bulk unlink files from the upload volume. Used by one-off cleanup
