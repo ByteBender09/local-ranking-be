@@ -45,6 +45,13 @@ export class Review {
   @Column({ type: 'text' })
   body: string;
 
+  // Photos the reviewer attached on Google. Stored as raw provider URLs
+  // (lh3.googleusercontent.com) — those hosts are in the next/image
+  // whitelist + SafeImage's fallback chain so the FE renders them
+  // directly without needing a CDN rehost pass.
+  @Column({ type: 'text', array: true, default: () => 'ARRAY[]::text[]' })
+  photos: string[];
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

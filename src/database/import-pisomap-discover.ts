@@ -7,8 +7,15 @@ import axios from 'axios';
 import sharp from 'sharp';
 import { DataSource, EntityManager } from 'typeorm';
 import { dataSourceOptions } from './data-source';
-import { City, Venue, User, Review } from './entities';
+import { City, Venue, User, Review, Ward } from './entities';
 import type { Category } from './entities';
+import {
+  resolveWardFromVenue,
+  toNormalizable,
+  type NormalizableWard,
+  type ResolveResult,
+} from '../modules/venues/ward-resolver';
+import { buildExternalRaw } from './piso-to-external-raw';
 
 dotenv.config();
 
@@ -53,8 +60,15 @@ const FLAGS = {
   city: arg('city', ''),
   category: arg('category', '') as Category | '',
   count: parseInt(arg('count', '10'), 10),
+  // STRICT defaults — venues that don't pass are rejected outright. NEVER
+  // fall back to the Unsplash image pool: a venue with no real photos has
+  // no business being in the user-facing dataset.
+  //   rating  > 4.0   (default)
+  //   reviews > 200   (default — was 100; bumped after fake-image audit)
+  //   images >= 5     (default; counted AFTER successful CDN upload)
+  //   skipped if image candidates returned by Piso < 2
   minRating: parseFloat(arg('min-rating', '4.0')),
-  minReviews: parseInt(arg('min-reviews', '100'), 10),
+  minReviews: parseInt(arg('min-reviews', '200'), 10),
   minImages: parseInt(arg('min-images', '5'), 10),
   skipIfImagesLt: parseInt(arg('skip-if-images-lt', '2'), 10),
   photos: parseInt(arg('photos', '5'), 10),
@@ -334,6 +348,24 @@ async function main(): Promise<void> {
   const cityLng: number = city.lng;
   log(`  city center: ${cityLat},${cityLng}`);
 
+  // Load wards for this city once. Each venue we insert resolves its
+  // canonical post-2025 ward at write time so the row lands in DB with
+  // ward_canonical / ward_type / ward_resolution_method already populated
+  // — no follow-up backfill needed.
+  const wardEntities = await ds.getRepository(Ward).find({
+    where: { city: { id: city.id } },
+  });
+  const cityWards: NormalizableWard[] = toNormalizable(wardEntities.map((w) => ({
+    name: w.name,
+    type: w.type as 'phuong' | 'xa' | 'dac_khu',
+    aliasesOldDistrict: w.aliasesOldDistrict ?? [],
+    aliasesOldWards: w.aliasesOldWards ?? [],
+    aliasesUser: w.aliasesUser ?? [],
+  })));
+  log(`  loaded ${cityWards.length} canonical wards for ${FLAGS.city}`);
+  let wardResolvedCount = 0;
+  let wardUnresolvedCount = 0;
+
   const keywords = CATEGORY_KEYWORDS[FLAGS.category as Category];
   const progress = loadProgress();
   const reviewerCache = new Map<string, string>();
@@ -479,8 +511,24 @@ async function main(): Promise<void> {
       const description = (place?.description ?? `${name} — ${city.name}.`).slice(0, 2000);
       const tags = [`${FLAGS.category}-discovered`];
 
+      // Resolve canonical post-2025 ward at insert time so the row never lands
+      // in DB with NULL ward_canonical. PISO gives us a full address string —
+      // resolveWardFromVenue tries the district field first, then parses
+      // address segments (drops street/number + city/country, takes what's in
+      // the middle). Tag the rawDistrict with the resolved value so the
+      // existing displayDistrict() fallback shows something sensible too.
+      const wardResolve: ResolveResult | null = resolveWardFromVenue(null, address, cityWards);
+      const rawDistrict = (wardResolve?.wardCanonical ?? '').slice(0, 80);
+      if (wardResolve) {
+        wardResolvedCount++;
+        log(`    ⛳ ward: ${wardResolve.wardCanonical} (${wardResolve.method}${wardResolve.matchedVia ? ` via ${wardResolve.matchedVia}` : ''})`);
+      } else {
+        wardUnresolvedCount++;
+        log(`    ⚠ ward unresolved — will leave NULL for backfill to handle`);
+      }
+
       if (FLAGS.dryRun) {
-        log(`    [dry-run] would import ${name} | ${images.length} imgs | ${picked.length} reviews`);
+        log(`    [dry-run] would import ${name} | ${images.length} imgs | ${picked.length} reviews | ward=${wardResolve?.wardCanonical ?? 'NULL'}`);
         imported++;
         continue;
       }
@@ -492,7 +540,10 @@ async function main(): Promise<void> {
           name: name.slice(0, 160),
           category: FLAGS.category as Category,
           cityId: city.id,
-          district: '',
+          district: rawDistrict,
+          wardCanonical: wardResolve?.wardCanonical ?? null,
+          wardType: wardResolve?.wardType ?? null,
+          wardResolutionMethod: wardResolve?.method ?? null,
           address,
           description,
           website: /^https?:\/\//i.test(website) ? website.slice(0, 500) : null,
@@ -508,11 +559,7 @@ async function main(): Promise<void> {
           externalId: c.data_id ?? null,
           externalOpeningHours: c.opening_hours ?? null,
           externalSyncedAt: new Date(),
-          externalRaw: place ? ({
-            data_id: place.data_id, place_id: place.place_id, type: place.type,
-            description: place.description, contacts: place.contacts,
-            google_maps_url: place.google_maps_url,
-          } as Record<string, unknown>) : null,
+          externalRaw: place ? buildExternalRaw(place, picked) : null,
           source: 'google',
           upvotes: seedRandom(slug, 2500, 100),
           isPublished: true,
@@ -525,8 +572,13 @@ async function main(): Promise<void> {
           if (usedUid.has(uid)) continue;
           usedUid.add(uid);
           const rating = Math.min(5, Math.max(1, Math.round(r.rating ?? 5)));
+          // Preserve reviewer-attached photos (lh3.googleusercontent.com)
+          // so the detail page can render them like Google Maps does. Raw
+          // URLs — already in next/image whitelist + SafeImage fallback.
+          const reviewPhotos = (r.photos ?? []).map((p) => p.url ?? '').filter(Boolean);
           await mgr.save(mgr.create(Review, {
             venueId: venue.id, userId: uid, rating, body: (r.text ?? '').slice(0, 4000),
+            photos: reviewPhotos,
           }));
           sum += rating;
           inserted++;
@@ -550,6 +602,7 @@ async function main(): Promise<void> {
 
   log(`\n▶ DONE city=${FLAGS.city} category=${FLAGS.category}`);
   log(`  imported=${imported}  skipped-no-img=${skippedNoImg}  skipped-too-few-img=${skippedTooFew}  failed=${failed}`);
+  log(`  ward: ${wardResolvedCount} resolved / ${wardUnresolvedCount} unresolved`);
   log(`  cache: search ${cacheStats.searchHit}/${cacheStats.searchHit + cacheStats.searchMiss} hit, place ${cacheStats.placeHit}/${cacheStats.placeHit + cacheStats.placeMiss} hit`);
   log(`  log saved: ${LOG_FILE}`);
   await ds.destroy();

@@ -8,6 +8,7 @@ import { DataSource, EntityManager } from 'typeorm';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
 import { dataSourceOptions } from './data-source';
 import { Venue, User, Review } from './entities';
+import { buildExternalRaw } from './piso-to-external-raw';
 
 dotenv.config();
 
@@ -508,14 +509,11 @@ async function main(): Promise<void> {
           source: 'google',
         };
         if (place) {
-          patch.externalRaw = {
-            data_id: place.data_id,
-            place_id: place.place_id,
-            type: place.type,
-            description: place.description,
-            contacts: place.contacts,
-            google_maps_url: place.google_maps_url,
-          };
+          // Full external_raw — features → additionalInfo (Vietnamese
+          // category/labels) + review_list → reviews[] (apify shape with
+          // reviewImageUrls for the gallery on the detail page).
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          patch.externalRaw = buildExternalRaw(place, picked) as any;
         }
         await mgr.update(Venue, { id: v.id }, patch);
 
@@ -540,12 +538,16 @@ async function main(): Promise<void> {
           if (existingUids.has(uid)) continue;
           existingUids.add(uid);
           const rating = Math.min(5, Math.max(1, Math.round(r.rating ?? 5)));
+          // Preserve reviewer-attached photos (lh3.googleusercontent.com)
+          // the same way import-pisomap.ts does.
+          const reviewPhotos = (r.photos ?? []).map((p) => p.url ?? '').filter(Boolean);
           await mgr.save(
             mgr.create(Review, {
               venueId: v.id,
               userId: uid,
               rating,
               body: (r.text ?? '').slice(0, 4000),
+              photos: reviewPhotos,
             }),
           );
           insertedLocal++;

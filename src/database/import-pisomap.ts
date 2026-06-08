@@ -6,10 +6,16 @@ import axios from 'axios';
 import sharp from 'sharp';
 import { DataSource, EntityManager } from 'typeorm';
 import { dataSourceOptions } from './data-source';
-import { City, Venue, User, Review } from './entities';
+import { City, Venue, User, Review, Ward } from './entities';
 import type { Category } from './entities';
 import { LANDMARK_VENUES } from './seed-data/landmark-venues';
-import { imagesForVenue } from './seed-data/images';
+import {
+  resolveWardFromVenue,
+  toNormalizable,
+  type NormalizableWard,
+  type ResolveResult,
+} from '../modules/venues/ward-resolver';
+import { buildExternalRaw } from './piso-to-external-raw';
 
 dotenv.config();
 
@@ -44,6 +50,12 @@ const FLAGS = {
   limit: parseInt(arg('limit', '0'), 10),
   photos: parseInt(arg('photos', '5'), 10),
   reviews: parseInt(arg('reviews', '4'), 10),
+  // STRICT quality filters — venues failing any are skipped entirely. There
+  // is no Unsplash pool fallback anywhere; a venue with too few real photos
+  // simply doesn't get imported.
+  minRating: parseFloat(arg('min-rating', '4.0')),
+  minReviews: parseInt(arg('min-reviews', '200'), 10),
+  minImages: parseInt(arg('min-images', '5'), 10),
   uploadDelay: parseInt(arg('upload-delay', '300'), 10),
   apiDelay: parseInt(arg('api-delay', '500'), 10),
   dryRun: process.argv.includes('--dry-run'),
@@ -217,14 +229,35 @@ async function main(): Promise<void> {
   const progress = loadProgress();
   const reviewerCache = new Map<string, string>();
   let created = 0, skipped = 0, notFound = 0, failed = 0;
+  let droppedRating = 0, droppedReviews = 0, droppedImages = 0;
   const limitReached = () => FLAGS.limit > 0 && created >= FLAGS.limit;
+
+  // Pre-load wards for every city we'll touch — resolve canonical post-2025
+  // ward at insert time so rows never land in DB with NULL ward_canonical.
+  console.log(`Strict filters: rating>${FLAGS.minRating}, reviews>${FLAGS.minReviews}, images>=${FLAGS.minImages} (NO Unsplash fallback)`);
+  const allWards = await ds.getRepository(Ward).find({ relations: ['city'] });
+  const wardsByCity = new Map<string, NormalizableWard[]>();
+  for (const w of allWards) {
+    const slug = w.city.slug;
+    const list = wardsByCity.get(slug) ?? [];
+    list.push(...toNormalizable([{
+      name: w.name,
+      type: w.type as 'phuong' | 'xa' | 'dac_khu',
+      aliasesOldDistrict: w.aliasesOldDistrict ?? [],
+      aliasesOldWards: w.aliasesOldWards ?? [],
+      aliasesUser: w.aliasesUser ?? [],
+    }]));
+    wardsByCity.set(slug, list);
+  }
+  console.log(`Loaded ${allWards.length} wards across ${wardsByCity.size} cities`);
 
   for (const [citySlug, seeds] of Object.entries(LANDMARK_VENUES)) {
     if (FLAGS.onlyCity && citySlug !== FLAGS.onlyCity) continue;
     if (limitReached()) break;
     const city = await cityRepo.findOne({ where: { slug: citySlug } });
     if (!city) { console.warn(`⚠ city ${citySlug} not found — skip`); continue; }
-    console.log(`\n=== ${citySlug} (${seeds.length}) ===`);
+    const cityWards = wardsByCity.get(citySlug) ?? [];
+    console.log(`\n=== ${citySlug} (${seeds.length}, ${cityWards.length} wards) ===`);
 
     for (const seed of seeds) {
       if (limitReached()) break;
@@ -275,19 +308,40 @@ async function main(): Promise<void> {
         const hours = compactHours(matched?.opening_hours) || seed.hours;
 
         if (!matched) {
+          // STRICT mode (post-2026-06 audit): no PISO match = no real photos/
+          // reviews = reject. Previously we'd fall through with curated data
+          // + Unsplash pool images — that's exactly the failure mode the user
+          // surfaced ("vẫn còn ảnh Unsplash sau khi import").
           notFound++;
-          console.log(`  ? no PISO match: ${seed.name} (using curated data, pool images)`);
+          progress[slug] = 'skipped-no-match'; saveProgress(progress);
+          console.log(`  ✗ SKIP — no PISO match for "${seed.name}" (would have needed Unsplash fallback)`);
+          continue;
+        }
+
+        // QUALITY GATE — apply BEFORE downloading anything.
+        if (extRating <= FLAGS.minRating) {
+          droppedRating++;
+          progress[slug] = 'skipped-rating'; saveProgress(progress);
+          console.log(`  ✗ SKIP — rating ${extRating} <= ${FLAGS.minRating}: ${seed.name}`);
+          continue;
+        }
+        if (extReviews <= FLAGS.minReviews) {
+          droppedReviews++;
+          progress[slug] = 'skipped-reviews'; saveProgress(progress);
+          console.log(`  ✗ SKIP — reviews ${extReviews} <= ${FLAGS.minReviews}: ${seed.name}`);
+          continue;
         }
 
         if (FLAGS.dryRun) {
           const media = place ? flatMedia(place) : [];
           const revs = (place?.review_list ?? []).filter((r) => (r.text ?? '').trim());
-          console.log(`  [dry] ${seed.name} → ${matched ? `MATCH "${matched.title}" ${extRating}★/${extReviews}` : 'NO MATCH'} | imgs=${media.length} reviews=${revs.length} @ ${lat.toFixed(4)},${lng.toFixed(4)}`);
+          console.log(`  [dry] ${seed.name} → MATCH "${matched.title}" ${extRating}★/${extReviews} | imgs=${media.length} reviews=${revs.length} @ ${lat.toFixed(4)},${lng.toFixed(4)}`);
           created++;
           continue;
         }
 
-        // 3) photos → upload (fall back to category pool if none / fail)
+        // 3) photos → upload. NO Unsplash fallback: if we can't upload at
+        // least --min-images real photos to our CDN, the venue is rejected.
         let images: string[] = [];
         const mediaUrls = place ? flatMedia(place) : [];
         for (const u of mediaUrls.slice(0, FLAGS.photos * 3)) {
@@ -295,7 +349,12 @@ async function main(): Promise<void> {
           try { images.push(await uploadImage(u)); } catch (e) { console.warn(`    img failed: ${String(e)}`); }
           await sleep(FLAGS.uploadDelay);
         }
-        if (images.length === 0) images = imagesForVenue(seed.category as Category, slug);
+        if (images.length < FLAGS.minImages) {
+          droppedImages++;
+          progress[slug] = 'skipped-images'; saveProgress(progress);
+          console.log(`  ✗ SKIP — only ${images.length} usable images (need ${FLAGS.minImages}): ${seed.name}`);
+          continue;
+        }
 
         // 4) reviews — prefer substantive (longer text) + higher rating, dedupe
         // authors. Sort candidates so the most meaningful reviews win the N slots.
@@ -316,6 +375,21 @@ async function main(): Promise<void> {
 
         const website = (place?.contacts?.website ?? matched?.contacts?.website ?? '').trim();
 
+        // Resolve canonical post-2025 ward — try seed.district first (the
+        // curator's intent), then fall back to parsing the PISO address. The
+        // venue row lands in DB with ward_canonical/ward_type/method already
+        // populated so the search UI's ward filter works immediately.
+        const wardResolve: ResolveResult | null = resolveWardFromVenue(
+          seed.district,
+          address,
+          cityWards,
+        );
+        if (wardResolve) {
+          console.log(`    ⛳ ward: ${wardResolve.wardCanonical} (${wardResolve.method})`);
+        } else {
+          console.log(`    ⚠ ward unresolved — backfill script will retry with geo fallback`);
+        }
+
         let reviewsInserted = 0;
         await ds.transaction(async (mgr) => {
           const venue = await mgr.save(mgr.create(Venue, {
@@ -324,6 +398,9 @@ async function main(): Promise<void> {
             category: seed.category as Category,
             cityId: city.id,
             district: seed.district.slice(0, 80),
+            wardCanonical: wardResolve?.wardCanonical ?? null,
+            wardType: wardResolve?.wardType ?? null,
+            wardResolutionMethod: wardResolve?.method ?? null,
             address,
             description: seed.description,
             website: /^https?:\/\//i.test(website) ? website.slice(0, 500) : null,
@@ -339,12 +416,8 @@ async function main(): Promise<void> {
             externalId: matched?.data_id ?? null,
             externalOpeningHours: matched?.opening_hours ?? null,
             externalSyncedAt: matched ? new Date() : null,
-            externalRaw: place ? ({
-              data_id: place.data_id, place_id: place.place_id, type: place.type,
-              description: place.description, contacts: place.contacts,
-              google_maps_url: place.google_maps_url,
-            } as Record<string, unknown>) : null,
-            source: matched ? 'google' : 'curated',
+            externalRaw: place ? buildExternalRaw(place, picked) : null,
+            source: 'google',
             upvotes: seedRandom(slug, 2500, 100),
             isPublished: true,
           }));
@@ -360,8 +433,11 @@ async function main(): Promise<void> {
             if (usedUid.has(uid)) continue; // two author names collapsed to one user → skip dup
             usedUid.add(uid);
             const rating = Math.min(5, Math.max(1, Math.round(r.rating ?? 5)));
+            // Preserve reviewer-attached photos from Google (Apify-style).
+            const reviewPhotos = (r.photos ?? []).map((p) => p.url ?? '').filter(Boolean);
             await mgr.save(mgr.create(Review, {
               venueId: venue.id, userId: uid, rating, body: (r.text ?? '').slice(0, 4000),
+              photos: reviewPhotos,
             }));
             sum += rating;
             inserted++;
@@ -383,7 +459,9 @@ async function main(): Promise<void> {
     }
   }
 
-  console.log(`\n✓ Done. created=${created} skipped=${skipped} notFound(curated-fallback)=${notFound} failed=${failed}`);
+  console.log(`\n✓ Done.`);
+  console.log(`  created=${created} skipped(existing)=${skipped} failed=${failed}`);
+  console.log(`  rejected: no-match=${notFound} rating=${droppedRating} reviews=${droppedReviews} images=${droppedImages}`);
   await ds.destroy();
 }
 
