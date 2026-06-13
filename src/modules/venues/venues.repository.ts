@@ -168,6 +168,46 @@ export class VenuesRepository {
       .getMany();
   }
 
+  // Published venues within [radius] metres of (lat,lng), nearest first. A
+  // bounding-box prefilter keeps the haversine scan cheap; the exact distance
+  // then filters + orders. Used by the trip capture flow to auto-suggest the
+  // place the user is standing at.
+  nearby(
+    lat: number,
+    lng: number,
+    radius: number,
+    limit: number,
+  ): Promise<Venue[]> {
+    const dist =
+      `(6371000 * acos(LEAST(1, ` +
+      `cos(radians(:lat)) * cos(radians(venue.lat)) * ` +
+      `cos(radians(venue.lng) - radians(:lng)) + ` +
+      `sin(radians(:lat)) * sin(radians(venue.lat)))))`;
+    const latDelta = radius / 111320;
+    const cosLat = Math.cos((lat * Math.PI) / 180);
+    const lngDelta = radius / (111320 * (Math.abs(cosLat) < 1e-6 ? 1e-6 : cosLat));
+    return this.repo
+      .createQueryBuilder('venue')
+      .innerJoinAndSelect('venue.city', 'city')
+      .addSelect(dist, 'distance')
+      .where('venue.is_published = true')
+      .andWhere('venue.lat BETWEEN :latMin AND :latMax')
+      .andWhere('venue.lng BETWEEN :lngMin AND :lngMax')
+      .andWhere(`${dist} <= :radius`)
+      .orderBy('distance', 'ASC')
+      .setParameters({
+        lat,
+        lng,
+        radius,
+        latMin: lat - latDelta,
+        latMax: lat + latDelta,
+        lngMin: lng - Math.abs(lngDelta),
+        lngMax: lng + Math.abs(lngDelta),
+      })
+      .limit(limit)
+      .getMany();
+  }
+
   search(query: string, limit: number): Promise<Venue[]> {
     const term = `%${query.toLowerCase()}%`;
     return this.repo

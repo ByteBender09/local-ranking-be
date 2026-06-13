@@ -45,6 +45,15 @@ export class VenuesService {
     return this.repo.findByIds(ids);
   }
 
+  nearby(
+    lat: number,
+    lng: number,
+    radius: number,
+    limit: number,
+  ): Promise<Venue[]> {
+    return this.repo.nearby(lat, lng, radius, limit);
+  }
+
   categoryCounts(citySlug?: string): Promise<Record<string, number>> {
     return this.repo.categoryCounts(citySlug);
   }

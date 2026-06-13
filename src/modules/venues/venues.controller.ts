@@ -32,6 +32,26 @@ export class VenuesController {
     return this.venues.trending(Math.min(Math.max(limit, 1), 50));
   }
 
+  // Published venues within [radius] metres of (lat,lng), nearest first.
+  // Declared before ':slug' so the static path wins the route match.
+  @Get('nearby')
+  nearby(
+    @Query('lat') lat: string,
+    @Query('lng') lng: string,
+    @Query('radius', new DefaultValuePipe(50), ParseIntPipe) radius: number,
+    @Query('limit', new DefaultValuePipe(8), ParseIntPipe) limit: number,
+  ): Promise<Venue[]> {
+    const latN = Number(lat);
+    const lngN = Number(lng);
+    if (!Number.isFinite(latN) || !Number.isFinite(lngN)) return Promise.resolve([]);
+    return this.venues.nearby(
+      latN,
+      lngN,
+      Math.min(Math.max(radius, 1), 5000),
+      Math.min(Math.max(limit, 1), 30),
+    );
+  }
+
   @Get('search')
   @PublicCache({ sMaxAge: 30, staleWhileRevalidate: 120 })
   search(
