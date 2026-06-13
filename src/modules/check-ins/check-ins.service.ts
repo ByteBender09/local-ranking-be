@@ -12,7 +12,11 @@ import {
   Venue,
   Vote,
 } from '../../database/entities';
-import { CreateCheckInDto, UpdateMemoryDto } from './dto/check-in.dto';
+import {
+  CreateCheckInDto,
+  CreateCustomCheckInDto,
+  UpdateMemoryDto,
+} from './dto/check-in.dto';
 import { isSameVnDay } from '../../common/utils/time.util';
 import { UploadCleanupService } from '../uploads/upload-cleanup.service';
 
@@ -124,6 +128,39 @@ export class CheckInsService {
           }),
         );
       }
+      return created;
+    });
+  }
+
+  // Create a check-in at a custom place NOT in the venues catalog. venueId is
+  // left null; the row stores its own placeName + lat/lng. No per-day
+  // uniqueness applies (there's no venue to dedupe against) and we don't touch
+  // the journey timeline (which is venue-based). Used by the trip feature so
+  // members can capture memories anywhere along the way.
+  async createCustom(
+    userId: string,
+    dto: CreateCustomCheckInDto,
+  ): Promise<CheckIn> {
+    return this.dataSource.transaction(async (manager) => {
+      const hasMemory =
+        Boolean(dto.comment && dto.comment.trim()) ||
+        Boolean(dto.photos && dto.photos.length);
+
+      const created = manager.create(CheckIn, {
+        venueId: null,
+        userId,
+        placeName: dto.placeName,
+        placeAddress: dto.placeAddress ?? null,
+        lat: dto.lat,
+        lng: dto.lng,
+        comment: dto.comment ?? null,
+        photos: dto.photos ?? [],
+        friends: dto.friends ?? [],
+        isPublic: dto.isPublic ?? true,
+        memoryCreatedAt: hasMemory ? new Date() : null,
+      });
+      await manager.save(created);
+      await manager.increment(User, { id: userId }, 'checkInCount', 1);
       return created;
     });
   }
@@ -262,22 +299,27 @@ export class CheckInsService {
       await manager.softDelete(CheckIn, { id: ci.id });
       await manager.decrement(User, { id: userId }, 'checkInCount', 1);
 
-      // Upvotes require at least one check-in. If this was the user's last
-      // check-in at the venue, drop any lingering vote + denormalised
-      // counter. Votes themselves don't carry images, so we hard-delete
-      // them as before — no recovery concern.
-      const remaining = await manager.count(CheckIn, {
-        where: { venueId: ci.venueId, userId },
-      });
-      if (remaining === 0) {
-        const vote = await manager.findOne(Vote, {
-          where: { venueId: ci.venueId, userId },
+      // Vote cleanup only applies to venue-based check-ins — custom places
+      // (venueId null) carry no votes.
+      const venueId = ci.venueId;
+      if (venueId) {
+        // Upvotes require at least one check-in. If this was the user's last
+        // check-in at the venue, drop any lingering vote + denormalised
+        // counter. Votes themselves don't carry images, so we hard-delete
+        // them as before — no recovery concern.
+        const remaining = await manager.count(CheckIn, {
+          where: { venueId, userId },
         });
-        if (vote) {
-          if (vote.value === 1) {
-            await manager.decrement(Venue, { id: ci.venueId }, 'upvotes', 1);
+        if (remaining === 0) {
+          const vote = await manager.findOne(Vote, {
+            where: { venueId, userId },
+          });
+          if (vote) {
+            if (vote.value === 1) {
+              await manager.decrement(Venue, { id: venueId }, 'upvotes', 1);
+            }
+            await manager.delete(Vote, { id: vote.id });
           }
-          await manager.delete(Vote, { id: vote.id });
         }
       }
     });

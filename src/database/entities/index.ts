@@ -17,3 +17,8 @@ export { Ward } from './ward.entity';
 export type { WardType } from './ward.entity';
 export { AiSearchCache } from './ai-search-cache.entity';
 export { UserFollow } from './user-follow.entity';
+export { Trip } from './trip.entity';
+export type { TripVisibility } from './trip.entity';
+export { TripDestination } from './trip-destination.entity';
+export { TripMember } from './trip-member.entity';
+export type { TripMemberRole, TripMemberStatus } from './trip-member.entity';

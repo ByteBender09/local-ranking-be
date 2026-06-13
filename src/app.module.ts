@@ -38,6 +38,7 @@ import { BrandingModule } from './modules/branding/branding.module';
 import { PartnersModule } from './modules/partners/partners.module';
 import { OgModule } from './modules/og/og.module';
 import { AiSearchModule } from './modules/ai-search/ai-search.module';
+import { TripsModule } from './modules/trips/trips.module';
 
 @Module({
   imports: [
@@ -125,6 +126,7 @@ import { AiSearchModule } from './modules/ai-search/ai-search.module';
     PartnersModule,
     OgModule,
     AiSearchModule,
+    TripsModule,
   ],
   controllers: [HealthController],
   providers: [

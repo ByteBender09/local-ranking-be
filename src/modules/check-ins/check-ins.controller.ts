@@ -18,7 +18,11 @@ import {
 } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { CheckIn } from '../../database/entities';
-import { CreateCheckInDto, UpdateMemoryDto } from './dto/check-in.dto';
+import {
+  CreateCheckInDto,
+  CreateCustomCheckInDto,
+  UpdateMemoryDto,
+} from './dto/check-in.dto';
 import { CheckInsService } from './check-ins.service';
 import { PublicUserDto } from '../users/dto/public-user.dto';
 
@@ -63,6 +67,15 @@ export class CheckInsController {
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<CheckIn> {
     return this.service.create(slug, user.id, body);
+  }
+
+  // Check in at a custom place not in the venues catalog (trip feature).
+  @Post('check-ins/custom')
+  createCustom(
+    @Body() body: CreateCustomCheckInDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<CheckIn> {
+    return this.service.createCustom(user.id, body);
   }
 
   // Slug-based convenience routes act on the user's latest check-in at a venue

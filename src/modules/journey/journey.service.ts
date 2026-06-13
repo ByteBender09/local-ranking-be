@@ -32,7 +32,12 @@ export class JourneyService {
       select: { venueId: true },
     });
     if (userCheckIns.length === 0) return;
-    const checkInVenueIds = userCheckIns.map((c) => c.venueId);
+    // Custom (off-catalog) check-ins have no venue and never enter the
+    // venue-based journey timeline.
+    const checkInVenueIds = userCheckIns
+      .map((c) => c.venueId)
+      .filter((id): id is string => id !== null);
+    if (checkInVenueIds.length === 0) return;
     const existingEntries = await this.entries.find({
       where: { userId, venueId: In(checkInVenueIds) },
       select: { venueId: true },
