@@ -13,9 +13,12 @@ import { User } from './user.entity';
 
 export type TripMemberRole = 'owner' | 'member';
 // invited → owner sent an invite, awaiting response.
-// joined  → accepted; this user's memories feed into the trip.
+// joined  → accepted; this user is an active member.
 // declined→ rejected the invite (kept as a tombstone so re-invites are explicit).
-export type TripMemberStatus = 'invited' | 'joined' | 'declined';
+// left    → was a joined member but left. The trip disappears from THEIR side,
+//           but their past memories stay in the trip feed for everyone else
+//           (we never delete other people's memories).
+export type TripMemberStatus = 'invited' | 'joined' | 'declined' | 'left';
 
 @Entity({ name: 'trip_members' })
 @Unique('uq_trip_member_pair', ['tripId', 'userId'])

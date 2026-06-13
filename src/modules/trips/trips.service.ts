@@ -96,8 +96,10 @@ export class TripsService {
     const trip = await this.loadFull(tripId);
     await this.assertCanView(trip, viewerId);
 
+    // Include members who have LEFT as well as joined ones: leaving must not
+    // erase the memories a person already contributed to the trip.
     const memberIds = (trip.members ?? [])
-      .filter((m) => m.status === 'joined')
+      .filter((m) => m.status === 'joined' || m.status === 'left')
       .map((m) => m.userId);
     if (memberIds.length === 0) {
       return new PaginatedResponse<TripMemoryDto>(
@@ -270,6 +272,23 @@ export class TripsService {
     return this.loadFull(tripId);
   }
 
+  // A member leaves the trip from their own side. The trip vanishes from their
+  // /me/trips, but their past memories stay in the feed for everyone else (the
+  // row is kept with status 'left', not deleted). The owner can't leave — they
+  // must transfer ownership or delete the trip.
+  async leave(tripId: string, userId: string): Promise<void> {
+    const member = await this.members.findOne({ where: { tripId, userId } });
+    if (!member) return; // idempotent — not a member
+    const trip = await this.trips.findOne({ where: { id: tripId } });
+    if (trip && trip.ownerId === userId) {
+      throw new BadRequestException(
+        'Chủ phòng không thể rời. Hãy chuyển quyền hoặc xóa hành trình.',
+      );
+    }
+    member.status = 'left';
+    await this.members.save(member);
+  }
+
   async removeMember(
     tripId: string,
     ownerId: string,
@@ -348,7 +367,12 @@ export class TripsService {
   private async assertCanView(trip: Trip, viewerId?: string): Promise<void> {
     if (viewerId) {
       const member = (trip.members ?? []).find((m) => m.userId === viewerId);
-      if (member && member.status !== 'declined') return;
+      // Active members (invited/joined) always see it; declined/left fall back
+      // to the trip's visibility setting.
+      if (member &&
+          (member.status === 'invited' || member.status === 'joined')) {
+        return;
+      }
       if (trip.ownerId === viewerId) return;
     }
     if (trip.visibility === 'public') return;
