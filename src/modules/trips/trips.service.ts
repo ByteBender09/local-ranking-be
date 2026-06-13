@@ -114,25 +114,40 @@ export class TripsService {
     // (and timezone-agnostic): everything up to start-of-day(end) + 24h.
     const endNext = new Date(trip.endDate.getTime() + 24 * 60 * 60 * 1000);
 
-    const [rows, total] = await this.dataSource
-      .getRepository(CheckIn)
-      .createQueryBuilder('ci')
-      .leftJoinAndSelect('ci.venue', 'venue')
-      .leftJoinAndSelect('venue.city', 'city')
-      .leftJoinAndSelect('ci.user', 'user')
-      .where('ci.user_id IN (:...memberIds)', { memberIds })
-      .andWhere('ci.is_public = true')
-      .andWhere('ci.created_at >= :start', { start: trip.startDate })
-      .andWhere('ci.created_at < :endNext', { endNext })
-      .orderBy('ci.created_at', 'ASC')
-      .skip(pagination.skip)
-      .take(pagination.limit)
-      .getManyAndCount();
+    const repo = this.dataSource.getRepository(CheckIn);
+    // Shared filters. Reference columns by ENTITY PROPERTY (camelCase) so
+    // TypeORM maps them correctly.
+    const applyConds = (qb: ReturnType<typeof repo.createQueryBuilder>) =>
+      qb
+        .where('ci.userId IN (:...memberIds)', { memberIds })
+        .andWhere('ci.isPublic = :pub', { pub: true })
+        .andWhere('ci.createdAt >= :start', { start: trip.startDate })
+        .andWhere('ci.createdAt < :endNext', { endNext });
 
-    const data: TripMemoryDto[] = rows.map((ci) => {
-      const { user, ...rest } = ci;
-      return { ...rest, user: PublicUserDto.from(user) };
-    });
+    const total = await applyConds(repo.createQueryBuilder('ci')).getCount();
+
+    // Use raw limit/offset (not skip/take) so TypeORM does NOT switch to its
+    // DISTINCT-id pagination path — that path + a join + orderBy throws on
+    // Postgres ("ORDER BY must appear in SELECT DISTINCT list"). All joins
+    // here are to-one, so a plain LIMIT returns the right rows.
+    const rows = await applyConds(
+      repo
+        .createQueryBuilder('ci')
+        .leftJoinAndSelect('ci.venue', 'venue')
+        .leftJoinAndSelect('venue.city', 'city')
+        .leftJoinAndSelect('ci.user', 'user'),
+    )
+      .orderBy('ci.createdAt', 'ASC')
+      .limit(pagination.limit)
+      .offset(pagination.skip)
+      .getMany();
+
+    const data: TripMemoryDto[] = rows
+      .filter((ci) => ci.user != null) // guard: never map a missing author
+      .map((ci) => {
+        const { user, ...rest } = ci;
+        return { ...rest, user: PublicUserDto.from(user) };
+      });
     return new PaginatedResponse<TripMemoryDto>(
       data,
       total,
