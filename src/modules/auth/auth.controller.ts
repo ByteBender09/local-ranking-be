@@ -84,7 +84,7 @@ export class AuthController {
         return;
       }
 
-      this.setAccessCookie(res, session.accessToken);
+      this.setAccessCookie(req, res, session.accessToken);
       res.redirect(google.successRedirect);
     } catch {
       if (isMobile) {
@@ -161,10 +161,13 @@ export class AuthController {
   @Public()
   @Post('logout')
   @HttpCode(204)
-  logout(@Res({ passthrough: true }) res: Response): void {
-    res.clearCookie(ACCESS_TOKEN_COOKIE, this.cookieOptions());
+  logout(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): void {
+    res.clearCookie(ACCESS_TOKEN_COOKIE, this.cookieOptions(req));
     res.clearCookie(AUTH_PRESENT_COOKIE, {
-      ...this.cookieOptions(),
+      ...this.cookieOptions(req),
       httpOnly: false,
     });
   }
@@ -213,27 +216,30 @@ export class AuthController {
     return { ok: true };
   }
 
-  private setAccessCookie(res: Response, token: string): void {
+  private setAccessCookie(req: Request, res: Response, token: string): void {
     res.cookie(ACCESS_TOKEN_COOKIE, token, {
-      ...this.cookieOptions(),
+      ...this.cookieOptions(req),
       maxAge: ONE_WEEK_MS,
     });
     res.cookie(AUTH_PRESENT_COOKIE, '1', {
-      ...this.cookieOptions(),
+      ...this.cookieOptions(req),
       httpOnly: false,
       maxAge: ONE_WEEK_MS,
     });
   }
 
-  private cookieOptions() {
+  private cookieOptions(req?: Request) {
     const app = this.config.get<AppConfig>('app')!;
-    const isProd = app.nodeEnv === 'production';
+    const host = (req?.hostname ?? '').toLowerCase();
+    const isLocal =
+      host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
+    const useProd = app.nodeEnv === 'production' && !isLocal;
     return {
       httpOnly: true,
-      secure: isProd,
-      sameSite: isProd ? ('lax' as const) : ('lax' as const),
+      secure: useProd,
+      sameSite: 'lax' as const,
       path: '/',
-      domain: isProd ? '.homnaydidau.xyz' : undefined,
+      domain: useProd ? '.homnaydidau.xyz' : undefined,
     };
   }
 }
