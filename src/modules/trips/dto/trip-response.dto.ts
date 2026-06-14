@@ -63,6 +63,7 @@ export class TripDto {
   coverImage: string | null;
   startDate: Date;
   endDate: Date;
+  endedAt: Date | null;
   visibility: TripVisibility;
   destinations: TripDestinationDto[];
   members: TripMemberDto[];
@@ -93,6 +94,7 @@ export class TripDto {
       coverImage: trip.coverImage,
       startDate: trip.startDate,
       endDate: trip.endDate,
+      endedAt: trip.endedAt ?? null,
       visibility: trip.visibility,
       destinations,
       members,

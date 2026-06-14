@@ -52,6 +52,9 @@ export class Trip {
   @Column({ type: 'varchar', length: 16, default: 'followers' })
   visibility: TripVisibility;
 
+  @Column({ type: 'timestamptz', name: 'ended_at', nullable: true })
+  endedAt: Date | null;
+
   @OneToMany(() => TripDestination, (d) => d.trip)
   destinations: TripDestination[];
 

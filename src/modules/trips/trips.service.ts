@@ -110,9 +110,12 @@ export class TripsService {
       );
     }
 
-    // Inclusive of the whole end day regardless of the stored time component
-    // (and timezone-agnostic): everything up to start-of-day(end) + 24h.
-    const endNext = new Date(trip.endDate.getTime() + 24 * 60 * 60 * 1000);
+    // Upper bound of the memory window. If the owner ended the trip early,
+    // `endedAt` is a precise instant and the window closes immediately. Otherwise
+    // we include the whole end day regardless of the stored time component (and
+    // timezone-agnostic): everything up to start-of-day(end) + 24h.
+    const endNext =
+      trip.endedAt ?? new Date(trip.endDate.getTime() + 24 * 60 * 60 * 1000);
 
     const repo = this.dataSource.getRepository(CheckIn);
     // Shared filters. Reference columns by ENTITY PROPERTY (camelCase) so
@@ -227,6 +230,20 @@ export class TripsService {
     if (!trip) return; // idempotent
     this.assertOwner(trip, userId);
     await this.trips.softDelete({ id: tripId });
+  }
+
+  // The owner ends the trip early. Stamps `endedAt = now`, which freezes the
+  // memory window (no new check-ins are collected) and flips the app to the
+  // read-only ended-album view. Idempotent — a no-op if already ended.
+  async endTrip(tripId: string, userId: string): Promise<Trip> {
+    const trip = await this.trips.findOne({ where: { id: tripId } });
+    if (!trip) throw new NotFoundException('Trip not found');
+    this.assertOwner(trip, userId);
+    if (!trip.endedAt) {
+      trip.endedAt = new Date();
+      await this.trips.save(trip);
+    }
+    return this.loadFull(tripId);
   }
 
   async invite(

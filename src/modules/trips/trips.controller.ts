@@ -100,6 +100,15 @@ export class TripsController {
     return TripDto.from(trip, user.id);
   }
 
+  @Post('trips/:id/end')
+  async end(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<TripDto> {
+    const trip = await this.service.endTrip(id, user.id);
+    return TripDto.from(trip, user.id);
+  }
+
   @Post('trips/:id/leave')
   @HttpCode(204)
   async leave(
