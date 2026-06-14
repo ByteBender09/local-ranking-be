@@ -323,6 +323,16 @@ export class UsersService {
   }
 
   async deleteAccount(userId: string): Promise<void> {
-    await this.users.softDelete({ id: userId });
+    // Hard delete to satisfy App Store 5.1.1(v) / Play data-deletion rules:
+    // the user's personal data must actually be removed, not just flagged.
+    //
+    // Every child FK that references the user is declared `onDelete: CASCADE`
+    // (check-ins, trips + members/destinations, journey entries, reviews,
+    // votes, follows, saved venues), so a single DELETE cascades them away at
+    // the DB level. Tours use `onDelete: SET NULL`, so authored tours survive
+    // un-owned. Removing the row also frees the partial-unique google_id/email
+    // indexes — without this, signing in again would hit a duplicate-key error
+    // on the orphaned soft-deleted row and lock the person out permanently.
+    await this.users.delete({ id: userId });
   }
 }
