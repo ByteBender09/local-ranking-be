@@ -69,7 +69,12 @@ import { TripsModule } from './modules/trips/trips.module';
             rootPath,
             serveRoot: '/uploads',
             serveStaticOptions: {
-              maxAge: 7 * 24 * 60 * 60 * 1000,
+              // Uploaded files are content-addressed (timestamp-random filename,
+              // never reused) so they're safe to cache forever. `immutable` tells
+              // Cloudinary's fetch layer and browsers to skip origin revalidation
+              // entirely — cutting repeat bandwidth back to this volume.
+              maxAge: 365 * 24 * 60 * 60 * 1000,
+              immutable: true,
               fallthrough: true,
             },
           },
